@@ -190,6 +190,20 @@
       <input type="search" id="search" placeholder="например: аниме">
     </div>
     <div class="grp">
+      <label>Фильтр по частотности</label>
+      <label style="display:flex; align-items:center; gap:7px; font-size:13.5px; cursor:pointer">
+        <input type="checkbox" id="fMinOn"> скрывать фразы реже порога</label>
+      <div style="display:flex; gap:7px; margin-top:6px">
+        <input type="number" id="fMin" min="0" value="10" style="width:90px">
+        <select id="fMetric" style="flex:1">
+          <option value="f">основная (очень точная)</option>
+          <option value="b">базовая</option>
+        </select>
+      </div>
+      <div class="hint">фразы с частотностью ниже порога скрываются из всех папок и счётчиков
+      (частотность — суммарная по фразе вместе с её дублями)</div>
+    </div>
+    <div class="grp">
       <label>Целевое гео</label>
       <input type="search" id="targetGeo" list="geoList" placeholder="москва, мо, подмосковье">
       <datalist id="geoList"></datalist>
@@ -302,6 +316,7 @@ const INT_CLS = {"информационный": "ii", "коммерческое
 const TREES = {};                    // "openai_hard" -> {a,b,d}
 const state = {cols: ["openai"], mode: "hard",
                slider: 8200, minSize: 2, search: "",
+               fMinOn: false, fMin: 10, fMetric: "f",  // фильтр по частотности
                targetGeo: "",        // целевой регион: его гео = «без гео»
                sliders: {},          // сила объединения на каждый вид: openai/gemini/ab
                sel: null,            // папка для сравнения в A/B: {col, label, idxs}
@@ -345,6 +360,7 @@ function cutLabels(tree, k){
 function clusterize(lab){
   const map = new Map();
   for (let i = 0; i < N; i++){
+    if (state.fMinOn && (state.fMetric === "b" ? B[i] : F[i]) < state.fMin) continue;
     let arr = map.get(lab[i]);
     if (!arr) map.set(lab[i], arr = []);
     arr.push(i);
@@ -815,6 +831,9 @@ async function boot(){
     state.sel = null; savePrefs(); render();
   });
   $("#minSize").addEventListener("input", e => { state.minSize = Math.max(1, +e.target.value || 1); state.sel = null; render(); });
+  $("#fMinOn").addEventListener("change", e => { state.fMinOn = e.target.checked; state.sel = null; state.shown = {}; render(); });
+  $("#fMin").addEventListener("input", e => { state.fMin = Math.max(0, +e.target.value || 0); if (state.fMinOn){ state.sel = null; render(); } });
+  $("#fMetric").addEventListener("change", () => { state.fMetric = $("#fMetric").value; if (state.fMinOn){ state.sel = null; render(); } });
   $("#search").addEventListener("input", e => { state.search = e.target.value; state.shown = {}; savePrefs(); render(); });
   let tgTimer = null;
   $("#targetGeo").addEventListener("input", e => {
