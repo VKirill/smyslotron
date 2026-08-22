@@ -157,6 +157,11 @@
     color:var(--text); cursor:pointer; padding:6px 11px; font-size:13px; font-family:inherit}
   #selbar button:hover{border-color:var(--accent)}
   #selbar b{color:var(--accent)}
+  #ctxmenu{position:fixed; z-index:9; background:var(--panel2); border:1px solid var(--border);
+    border-radius:10px; padding:5px; box-shadow:0 14px 50px rgba(0,0,0,.6); min-width:250px}
+  .ctxitem{display:flex; gap:10px; align-items:center; padding:8px 12px; border-radius:7px;
+    cursor:pointer; font-size:13.5px}
+  .ctxitem:hover{background:var(--panel); color:var(--accent)}
   .q mark{background:var(--hl); color:var(--accent); border-radius:3px; padding:0 1px}
   .q .se{flex:none; display:inline-flex; gap:4px; opacity:0; transition:opacity .12s}
   .q:hover .se{opacity:1}
@@ -535,6 +540,44 @@ function updateSelBar(){
   $("#selbar").classList.toggle("on", SELQ.size > 0);
   $("#selCnt").textContent = SELQ.size;
 }
+
+/* ---------- контекстное меню кластера (правая кнопка по шапке папки) ---------- */
+function showCtx(e, c){
+  hideCtx();
+  const m = document.createElement("div");
+  m.id = "ctxmenu";
+  const n = c.idxs.length;
+  const items = [
+    ["☑", `Выделить фразы кластера (${fmt(n)})`, () => {
+      for (const i of c.idxs) SELQ.add(Q[i]);
+      updateSelBar(); render();
+    }],
+    ["✖", `Снять выделение с кластера`, () => {
+      for (const i of c.idxs) SELQ.delete(Q[i]);
+      updateSelBar(); render();
+    }],
+    ["🗑", `Кластер в корзину (${fmt(n)} фраз)`, () => {
+      for (const i of c.idxs) TRASH.add(Q[i]);
+      saveTrash(); render();
+    }],
+    ["⧉", "Копировать фразы кластера", () => copyCluster(c, document.createElement("button"))],
+  ];
+  for (const [ico, label, fn] of items){
+    const d = document.createElement("div");
+    d.className = "ctxitem";
+    d.innerHTML = `<span>${ico}</span><span>${label}</span>`;
+    d.onclick = () => { hideCtx(); fn(); };
+    m.appendChild(d);
+  }
+  document.body.appendChild(m);
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.min(e.clientX, innerWidth - w - 8) + "px";
+  m.style.top = Math.min(e.clientY, innerHeight - h - 8) + "px";
+}
+function hideCtx(){ const m = document.getElementById("ctxmenu"); if (m) m.remove(); }
+addEventListener("click", hideCtx);
+addEventListener("scroll", hideCtx, true);
+addEventListener("keydown", e => { if (e.key === "Escape") hideCtx(); });
 function renderRules(){
   const el = $("#rulesList");
   if (!el) return;
@@ -785,6 +828,7 @@ function folderEl(c, col, overlap){
     render();
   });
   head.addEventListener("click", () => toggleFolder(div, c, col));
+  head.addEventListener("contextmenu", e => { e.preventDefault(); showCtx(e, c); });
   return div;
 }
 
@@ -836,12 +880,27 @@ function expandInto(div, c, onlyMatches, colQ){
     const se = `<span class="se"><a class="ya" href="https://yandex.ru/search/?text=${eq}" target="_blank" rel="noopener" title="Выдача Яндекса">Я</a><a class="go" href="https://www.google.com/search?q=${eq}" target="_blank" rel="noopener" title="Выдача Google">G</a><a class="tr" data-i="${i}" title="В корзину — исключить из кластеризации">🗑</a></span>`;
     return `<div class="q"><input type="checkbox" class="qsel" data-i="${i}"${SELQ.has(Q[i]) ? " checked" : ""}><span class="qt">${ib}${hi(Q[i], q)}${mk}${dd}</span>${se}<span class="qf">${fmt(F[i])}</span></div>`;
   }).join("") + (sorted.length > CAP ? `<div class="q"><span class="qt" style="color:var(--muted)">… ещё ${fmt(sorted.length - CAP)}</span></div>` : "");
+  ql.addEventListener("mousedown", e => { if (e.shiftKey) e.preventDefault(); });
+  let lastSel = null;  // индекс строки последнего клика по галочке (для shift-диапазона)
   ql.addEventListener("click", e => {
     const cb = e.target.closest(".qsel");
     if (cb){
       e.stopPropagation();
-      const t = Q[+cb.dataset.i];
-      if (cb.checked) SELQ.add(t); else SELQ.delete(t);
+      const boxes = [...ql.querySelectorAll(".qsel")];
+      const pos = boxes.indexOf(cb);
+      const on = cb.checked;  // состояние ПОСЛЕ клика — оно же применяется к диапазону
+      if (e.shiftKey && lastSel !== null){
+        const [a, b] = [Math.min(lastSel, pos), Math.max(lastSel, pos)];
+        for (let k = a; k <= b; k++){
+          boxes[k].checked = on;
+          const t = Q[+boxes[k].dataset.i];
+          if (on) SELQ.add(t); else SELQ.delete(t);
+        }
+      } else {
+        const t = Q[+cb.dataset.i];
+        if (on) SELQ.add(t); else SELQ.delete(t);
+      }
+      lastSel = pos;
       updateSelBar();
       return;
     }
@@ -1112,7 +1171,8 @@ function savePrefs(){ dbSet("sem_prefs:" + (PID || "demo"),
   {view: state.cols, search: state.search, sliders: state.sliders,
    targetGeo: state.targetGeo, mode: state.mode,
    anOn: state.anOn, anQ: state.anQ, cmpTpls: state.cmpTpls,
-   minusWords: state.minusWords}); }
+   minusWords: state.minusWords,
+   fMode: state.fMode, fMin: state.fMin, fMetric: state.fMetric}); }
 
 // ---------- шаблоны фильтров ----------
 let TPLS = [];                       // загружаются в boot() из БД
@@ -1407,9 +1467,9 @@ async function boot(){
     if (!confirm(`Вернуть все ${TRASH.size.toLocaleString("ru-RU")} фраз из корзины в кластеризацию?`)) return;
     TRASH.clear(); saveTrash(); render();
   };
-  $("#fMode").addEventListener("change", () => { state.fMode = $("#fMode").value; state.sel = null; state.shown = {}; render(); });
-  $("#fMin").addEventListener("input", e => { state.fMin = Math.max(0, +e.target.value || 0); if (state.fMode !== "off"){ state.sel = null; render(); } });
-  $("#fMetric").addEventListener("change", () => { state.fMetric = $("#fMetric").value; if (state.fMode !== "off"){ state.sel = null; render(); } });
+  $("#fMode").addEventListener("change", () => { state.fMode = $("#fMode").value; state.sel = null; state.shown = {}; savePrefs(); render(); });
+  $("#fMin").addEventListener("input", e => { state.fMin = Math.max(0, +e.target.value || 0); savePrefs(); if (state.fMode !== "off"){ state.sel = null; render(); } });
+  $("#fMetric").addEventListener("change", () => { state.fMetric = $("#fMetric").value; savePrefs(); if (state.fMode !== "off"){ state.sel = null; render(); } });
   $("#search").addEventListener("input", e => { state.search = e.target.value; state.shown = {}; savePrefs(); render(); });
   let tgTimer = null;
   $("#targetGeo").addEventListener("input", e => {
@@ -1444,7 +1504,15 @@ async function boot(){
     state.cmpTpls = prefs.cmpTpls.filter(n => TPLS.some(t => t.name === n));
   if (Array.isArray(prefs.minusWords)){
     state.minusWords = prefs.minusWords.map(String);
-    $("#minusW").value = state.minusWords.join(", ");
+    $("#minusW").value = state.minusWords.join("\n");
+  }
+  if (["off", "hide", "nogroup"].includes(prefs.fMode)){
+    state.fMode = prefs.fMode;
+    state.fMin = Math.max(0, +prefs.fMin || 0);
+    if (["f", "b"].includes(prefs.fMetric)) state.fMetric = prefs.fMetric;
+    $("#fMode").value = state.fMode;
+    $("#fMin").value = state.fMin;
+    $("#fMetric").value = state.fMetric;
   }
   TRASH = new Set((await dbGet("sem_trash:" + (PID || "demo"))) || []);
   const rl = await dbGet("sem_rules:" + (PID || "demo"));
