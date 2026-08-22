@@ -129,6 +129,7 @@
   .tpl .tdel{flex:none; background:none; border:0; color:var(--muted); cursor:pointer;
     font-size:15px; padding:0 2px}
   .tpl .tdel:hover{color:#e05d5d}
+  .tpl .tcmp{flex:none; accent-color:var(--accent); cursor:pointer}
   .qlist{border-top:1px solid var(--border); padding:6px 11px 9px; background:#131722}
   .q{display:flex; gap:8px; padding:2.5px 0; font-size:13px}
   .q .qt{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
@@ -347,6 +348,7 @@ const state = {cols: ["openai"], mode: "hard",
                slider: 8200, minSize: 2, search: "",
                fMinOn: false, fMin: 10, fMetric: "f",  // фильтр по частотности
                anOn: false, anQ: [""], anFocus: null,  // режим анализа: столбцы-поиски
+               cmpTpls: [],          // имена шаблонов, включённых в сравнение колонками
                targetGeo: "",        // целевой регион: его гео = «без гео»
                sliders: {},          // сила объединения на каждый вид: openai/gemini/ab
                sel: null,            // папка для сравнения в A/B: {col, label, idxs}
@@ -440,9 +442,25 @@ function clusterize(lab){
   return cl;
 }
 
-function kFromSlider(){ return Math.round(state.slider / 10000 * (N - 1)); }
+function kFromSlider(s){ return Math.round((s ?? state.slider) / 10000 * (N - 1)); }
+function cmpTpls(){ return TPLS.filter(t => state.cmpTpls.includes(t.name)); }
 
 async function getCols(){
+  const cmp = cmpTpls();
+  if (cmp.length){
+    // сравнение шаблонов: колонка = шаблон со СВОИМИ вариантом/режимом/срезом/поиском
+    const cols = [];
+    for (const [ci, t] of cmp.entries()){
+      const p = (t.cols || []).find(x => META.provs.includes(x)) || META.provs[0];
+      const tree = await loadTree(p + "_" + t.mode);
+      const k = kFromSlider(t.slider);
+      const lab = cutLabels(tree, k);
+      cols.push({prov: p, tree, k, clusters: clusterize(lab), lab,
+                 q: (t.search || "").trim().toLowerCase(),
+                 key: "t#" + ci, tpl: t, minSize: t.minSize || 1});
+    }
+    return cols;
+  }
   if (state.anOn){
     // режим анализа: N колонок одной и той же кластеризации, у каждой свой поиск
     const p = state.cols[0];
@@ -492,7 +510,7 @@ function folderEl(c, col, overlap){
       ${c.dom ? `<span class="badge int ${INT_CLS[c.dom] || ""}${c.mixed ? " mx" : ""}" title="Интент кластера: ${esc(c.dom)}${c.mixed ? " (смешанный — есть второй интент ≥25%)" : ""}">${INT_SHORT[c.dom] || "?"}${c.mixed ? "⚠" : ""}</span>` : ""}
       ${c.geo ? `<span class="badge geo" title="Гео-кластер">📍 ${esc(c.geo)}</span>` : ""}
       ${c.qn ? `<span class="badge qb" title="Вопросных фраз">❓ ${Math.round(c.qn / c.idxs.length * 100)}%</span>` : ""}
-      ${isAB() && !state.anOn ? `<button class="cmp" title="Найти эти фразы в соседней колонке">⇄</button>` : ""}
+      ${isAB() && !state.anOn && !col.tpl ? `<button class="cmp" title="Найти эти фразы в соседней колонке">⇄</button>` : ""}
       <button class="copy" title="Скопировать уникальные фразы кластера (без дублей)">⧉</button>
       ${overlap ? `<span class="badge ov">${overlap} общ.</span>` : ""}
       <span class="badge" title="Уникальных смыслов${c.dups ? ` + склеенных дублей` : ""}">${fmt(c.idxs.length)}${c.dups ? `+${fmt(c.dups)}` : ""} фраз</span>
@@ -589,7 +607,7 @@ function render(){
           const key = cl.idxs.join(",");
           cl.same = sets.every(st => st.has(key));
           cl.diffWith = cl.same ? []
-            : cols.filter((_, ci) => !sets[ci].has(key)).map(x => titleOf(x.prov));
+            : cols.filter((_, ci) => !sets[ci].has(key)).map(x => x.tpl ? x.tpl.name : titleOf(x.prov));
         }
     } else {
       for (const cl of cols[0].clusters) cl.same = null;
@@ -616,11 +634,12 @@ function render(){
       const el = document.createElement("div");
       el.className = "col";
       const q = col.q || "";
+      const minS = col.minSize ?? state.minSize;
       const ovMap = ovMaps ? ovMaps[col.prov] : null;
       const isOther = !!ovMap;
       let clusters = col.clusters;
-      let small = clusters.filter(c => c.idxs.length < state.minSize);
-      clusters = clusters.filter(c => c.idxs.length >= state.minSize);
+      let small = clusters.filter(c => c.idxs.length < minS);
+      clusters = clusters.filter(c => c.idxs.length >= minS);
       if (q) clusters = clusters.filter(c => c.idxs.some(i => matchQ(i, q)));
       if (isOther && ovMap){
         clusters = clusters.filter(c => ovMap.has(c.label));
@@ -630,7 +649,17 @@ function render(){
 
       const head = document.createElement("div");
       head.className = "colhead";
-      if (col.an != null){
+      if (col.tpl){
+        // сравнение шаблонов: заголовок = имя шаблона и его настройки
+        head.innerHTML = `<span title="${esc(tplLabel(col.tpl))}"><b>${esc(col.tpl.name)}</b>
+            <span style="font-size:11px">${esc(tplLabel(col.tpl))}</span></span>
+          <span class="ancnt">${fmt(clusters.length)} папок</span>
+          <button class="andel" title="Убрать из сравнения">×</button>`;
+        head.querySelector(".andel").onclick = () => {
+          state.cmpTpls = state.cmpTpls.filter(n => n !== col.tpl.name);
+          savePrefs(); renderTpls(); render();
+        };
+      } else if (col.an != null){
         // режим анализа: вместо названия варианта — поле поиска колонки
         head.innerHTML = `<input class="anq" placeholder="запросы для отслеживания…"
             value="${esc(col.anq || "").replace(/"/g, "&quot;")}">
@@ -760,7 +789,7 @@ async function loadPrefs(){
 function savePrefs(){ dbSet("sem_prefs:" + (PID || "demo"),
   {view: state.cols, search: state.search, sliders: state.sliders,
    targetGeo: state.targetGeo, mode: state.mode,
-   anOn: state.anOn, anQ: state.anQ}); }
+   anOn: state.anOn, anQ: state.anQ, cmpTpls: state.cmpTpls}); }
 
 // ---------- шаблоны фильтров ----------
 let TPLS = [];                       // загружаются в boot() из БД
@@ -784,12 +813,23 @@ function renderTpls(){
       JSON.stringify(t.cols) === JSON.stringify(state.cols);
     const row = document.createElement("div");
     row.className = "tpl" + (active ? " on" : "");
-    row.innerHTML = `<span class="tname" title="${esc(tplLabel(t))}">${esc(t.name)}</span>
+    row.innerHTML = `<input type="checkbox" class="tcmp" title="Показать шаблон колонкой (отметь несколько — сравнишь)"
+        ${state.cmpTpls.includes(t.name) ? "checked" : ""}>
+      <span class="tname" title="${esc(tplLabel(t))}">${esc(t.name)}</span>
       <span class="tinfo">${esc(tplLabel(t))}</span>
       <button class="tdel" title="Удалить шаблон">×</button>`;
+    row.querySelector(".tcmp").onclick = e => {
+      e.stopPropagation();
+      state.cmpTpls = e.target.checked
+        ? [...state.cmpTpls, t.name]
+        : state.cmpTpls.filter(n => n !== t.name);
+      state.sel = null; state.shown = {};
+      savePrefs(); render();
+    };
     row.querySelector(".tdel").onclick = e => {
       e.stopPropagation();
-      const ts = loadTpls(); ts.splice(i, 1); saveTpls(ts); renderTpls();
+      state.cmpTpls = state.cmpTpls.filter(n => n !== t.name);
+      const ts = loadTpls(); ts.splice(i, 1); saveTpls(ts); renderTpls(); render();
     };
     row.onclick = () => applyTpl(t);
     list.appendChild(row);
@@ -975,6 +1015,8 @@ async function boot(){
     $("#modeHint").textContent = MODE_HINT[state.mode];
   }
   if (Array.isArray(prefs.anQ) && prefs.anQ.length) state.anQ = prefs.anQ.map(String);
+  if (Array.isArray(prefs.cmpTpls))
+    state.cmpTpls = prefs.cmpTpls.filter(n => TPLS.some(t => t.name === n));
   if (prefs.anOn){
     state.anOn = true;
     $("#anOn").checked = true;
