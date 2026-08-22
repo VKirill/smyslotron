@@ -46,10 +46,14 @@
   input[type=range]{width:100%; accent-color:var(--accent)}
   .row{display:flex; justify-content:space-between; font-size:13.5px; color:var(--muted)}
   .row b{color:var(--text)}
-  input[type=search],input[type=number]{width:100%; padding:7px 9px;
+  input[type=search],input[type=number],select{width:100%; padding:7px 9px;
     background:var(--panel2); border:1px solid var(--border); border-radius:8px;
-    color:var(--text); font-size:14.5px; outline:none}
-  input:focus{border-color:var(--accent)}
+    color:var(--text); font-size:14.5px; outline:none; font-family:inherit}
+  select{appearance:none; -webkit-appearance:none; cursor:pointer; padding-right:26px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%238b93a7' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 9px center}
+  select option{background:var(--panel2); color:var(--text)}
+  input:focus,select:focus{border-color:var(--accent)}
   .stats{border-top:1px solid var(--border); padding-top:12px; font-size:13.5px;
     display:grid; grid-template-columns:1fr auto; gap:4px 8px}
   .stats span:nth-child(even){text-align:right; color:var(--text); font-variant-numeric:tabular-nums}
