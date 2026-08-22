@@ -108,15 +108,16 @@ def labels_from_bin(fbin, n_reps: int, t: float):
 
 
 def build_all(emb, provider, data_dir, pct_from, pct_to):
-    x = _norm(emb)
-    dist = 1.0 - x @ x.T
+    x = _norm(emb).astype(np.float32)
+    dist = x @ x.T                      # float32: вдвое меньше памяти, чем float64
+    np.subtract(1.0, dist, out=dist)
     np.clip(dist, 0, 2, out=dist)
     np.fill_diagonal(dist, 0.0)
     rng = np.random.default_rng(42)
     sample = rng.choice(x.shape[0], size=min(2000, x.shape[0]), replace=False)
     sub = dist[np.ix_(sample, sample)]
     t_fine, t_coarse = np.percentile(sub[np.triu_indices(len(sample), 1)], [P_FINE, P_COARSE])
-    cond = squareform(dist, checks=False)
+    cond = squareform(dist, checks=False)  # float32 сохраняется (scipy приведёт к float64 внутри linkage)
     del dist
     z_avg = None
     for j, (name, method) in enumerate(METHODS.items()):

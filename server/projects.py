@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from .auth import current_user
-from .config import KNOWN_VARIANTS, MAX_ROWS, P, PROJECTS
+from .config import KNOWN_VARIANTS, P, PROJECTS
 from .db import db
 from .uploads import parse_upload_rows, save_template
 
@@ -203,8 +203,6 @@ async def append_project(pid: str, request: Request,
         # тот же файл, те же цифры — ничего не пересчитываем и не трогаем
         return {"added": 0, "merged": merged_cnt, "rows": len(existing),
                 "freq_only": freq_only, "ignored_new": 0, "no_change": True}
-    if len(existing) > MAX_ROWS:
-        raise HTTPException(400, f"Итого больше {MAX_ROWS:,} фраз — не влезает в лимит")
 
     with open(pdir / "keys.csv", "w", encoding="utf-8-sig", newline="") as f:
         w2 = csv.writer(f, delimiter=";")

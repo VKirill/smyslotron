@@ -12,7 +12,7 @@ import time
 from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 
 from .auth import current_user
-from .config import MAX_ROWS, MAX_UPLOAD_MB, P, UPLOADS
+from .config import MAX_UPLOAD_MB, P, UPLOADS
 from .db import db
 
 router = APIRouter(prefix=P)
@@ -203,7 +203,5 @@ def parse_upload_rows(body: dict) -> list[tuple]:
             return "1" if row[col].strip().strip('"').lower() in ("1", "да", "true", "yes", "+") else "0"
 
         rows_out.append((q, b, e, v, flag(tcol), flag(qscol)))
-        if len(rows_out) > MAX_ROWS:
-            raise HTTPException(400, f"Больше {MAX_ROWS:,} фраз — сократи файл")
     up.unlink(missing_ok=True)
     return rows_out
