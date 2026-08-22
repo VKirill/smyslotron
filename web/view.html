@@ -189,7 +189,8 @@
   <aside>
     <div class="grp actions">
       <a id="savesl" class="csvbtn" href="#" title="Зафиксировать текущий срез (вариант, режим, сила, мин. размер) как кластеризацию проекта: серверный CSV и интенты кластеров будут считаться по нему">💾 Сохранить</a>
-      <a id="slicebtn" class="csvbtn" href="#" title="Выгрузить кластеры ровно с текущими настройками (вариант, режим, сила, мин. размер)">⬇ Скачать срез</a>
+      <a id="slicebtn" class="csvbtn" href="#" title="Excel с текущим срезом: лист «Кластеры» — все запросы со всей информацией, лист «Маркеры» — чистый список маркерных запросов">⬇ Excel</a>
+      <a id="markbtn" class="csvbtn" href="#" title="Скопировать в буфер все маркерные запросы текущего среза (топ-фраза каждой папки, по одной на строку)">⧉ Маркеры</a>
     </div>
     <div class="grp">
       <label>Эмбеддинги</label>
@@ -979,19 +980,34 @@ function syncUI(){
     : "отметь до 3 вариантов — колонки встанут рядом для сравнения";
 }
 
-async function exportSlice(){
+async function sliceClusters(){
+  // кластеры текущего среза первой колонки (учитывают фильтр частотности и гео)
   const vkey = state.cols[0];
   const tree = await loadTree(vkey + "_" + state.mode);
-  const clusters = clusterize(cutLabels(tree, kFromSlider()));
+  return {vkey, clusters: clusterize(cutLabels(tree, kFromSlider()))};
+}
+
+function loadXLSX(){
+  return window.XLSX ? Promise.resolve() : new Promise((res, rej) => {
+    const s = document.createElement("script");
+    s.src = "vendor_xlsx.js"; s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+}
+
+async function exportSlice(){
+  const {vkey, clusters} = await sliceClusters();
   const lines = [["Запрос", "Частотность (Σ группы дублей)", "Базовая (Σ)", "Дубли",
-                  "Топоним", "Вопрос", "Интент", "Кластер", "Имя кластера",
+                  "Топоним", "Вопрос", "Интент", "Кластер", "Маркерный запрос",
                   "Интент кластера", "Риск смешения"]];
+  const markers = [];
   let ncl = 0;
   const noGroup = [];
   for (const c of clusters){
     if (c.idxs.length < state.minSize){ noGroup.push(...c.idxs); continue; }
     ncl++;
     const name = Q[c.top];
+    markers.push([name, c.sum, c.idxs.length, c.dom || ""]);
     for (const i of [...c.idxs].sort((x, y) => F[y] - F[x]))
       lines.push([Q[i], F[i], B[i], (D && D[i] ? D[i].join(" | ") : ""),
                   (G && G[i]) || "", (W && W[i]) ? "да" : "",
@@ -1002,16 +1018,29 @@ async function exportSlice(){
     lines.push([Q[i], F[i], B[i], (D && D[i] ? D[i].join(" | ") : ""),
                 (G && G[i]) || "", (W && W[i]) ? "да" : "",
                 (INT && INT[i]) || "", "", "Без группы", "", ""]);
-  const csv = "\ufeff" + lines.map(r =>
-    r.map(v => String(v).includes(";") || String(v).includes('"')
-      ? '"' + String(v).replace(/"/g, '""') + '"' : v).join(";")).join("\r\n");
+  await loadXLSX();
+  const wb = XLSX.utils.book_new();
+  const ws1 = XLSX.utils.aoa_to_sheet(lines);
+  ws1["!cols"] = [{wch: 45}, {wch: 12}, {wch: 10}, {wch: 40}, {wch: 12}, {wch: 8},
+                  {wch: 22}, {wch: 8}, {wch: 45}, {wch: 22}, {wch: 8}];
+  XLSX.utils.book_append_sheet(wb, ws1, "Кластеры");
+  const ws2 = XLSX.utils.aoa_to_sheet(
+    [["Маркерный запрос", "Σ частотность", "Фраз", "Интент кластера"], ...markers]);
+  ws2["!cols"] = [{wch: 50}, {wch: 14}, {wch: 8}, {wch: 22}];
+  XLSX.utils.book_append_sheet(wb, ws2, "Маркеры");
   const modeName = {hard: "hard", avg: "avg", soft: "soft"}[state.mode];
-  const fname = `srez_${vkey}_${modeName}_${(state.slider / 100).toFixed(1)}pct.csv`;
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(new Blob([csv], {type: "text/csv;charset=utf-8"}));
-  a.download = fname;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  XLSX.writeFile(wb, `srez_${vkey}_${modeName}_${(state.slider / 100).toFixed(1)}pct.xlsx`);
+}
+
+async function copyMarkers(btn){
+  const {clusters} = await sliceClusters();
+  const markers = clusters.filter(c => c.idxs.length >= state.minSize).map(c => Q[c.top]);
+  const old = btn.textContent;
+  try{
+    await navigator.clipboard.writeText(markers.join("\n"));
+    btn.textContent = `✓ ${markers.length}`;
+  }catch(err){ btn.textContent = "✗"; }
+  setTimeout(() => { btn.textContent = old; }, 1400);
 }
 
 function segInit(el, values, cur, cb){
@@ -1160,6 +1189,7 @@ async function boot(){
   syncUI();
 
   $("#slicebtn").onclick = e => { e.preventDefault(); exportSlice(); };
+  $("#markbtn").onclick = e => { e.preventDefault(); copyMarkers(e.currentTarget); };
 
   $("#savesl").onclick = async e => {
     e.preventDefault();
