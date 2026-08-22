@@ -122,6 +122,14 @@
   .q .qt{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .q .qf{color:var(--muted); font-size:12px; flex:none; font-variant-numeric:tabular-nums}
   .q mark{background:var(--hl); color:var(--accent); border-radius:3px; padding:0 1px}
+  .q .se{flex:none; display:inline-flex; gap:4px; opacity:0; transition:opacity .12s}
+  .q:hover .se{opacity:1}
+  .se a{display:inline-flex; align-items:center; justify-content:center; width:17px; height:17px;
+    border-radius:4px; border:1px solid var(--border); font-size:10px; font-weight:700;
+    text-decoration:none; line-height:1}
+  .se a.ya{color:#fc3f1d}
+  .se a.go{color:#4285f4}
+  .se a:hover{border-color:currentColor}
   .dup{color:var(--accent2); font-size:11.5px; cursor:help}
   .dup.hit{background:var(--hl); border-radius:4px; padding:0 4px}
   .badge.geo{color:var(--warn); border-color:var(--warn)}
@@ -515,7 +523,9 @@ function expandInto(div, c, onlyMatches){
     const ib = INT && INT[i]
       ? `<span class="pint ${INT_CLS[INT[i]] || ""}" title="${esc(INT[i])}">${INT_SHORT[INT[i]] || "?"}</span> ` : "";
     const mk = (W && W[i] ? " ❓" : "") + (G && G[i] ? " 📍" : "");
-    return `<div class="q"><span class="qt">${ib}${hi(Q[i], state.search)}${mk}${dd}</span><span class="qf">${fmt(F[i])}</span></div>`;
+    const eq = encodeURIComponent(Q[i]);
+    const se = `<span class="se"><a class="ya" href="https://yandex.ru/search/?text=${eq}" target="_blank" rel="noopener" title="Выдача Яндекса">Я</a><a class="go" href="https://www.google.com/search?q=${eq}" target="_blank" rel="noopener" title="Выдача Google">G</a></span>`;
+    return `<div class="q"><span class="qt">${ib}${hi(Q[i], state.search)}${mk}${dd}</span>${se}<span class="qf">${fmt(F[i])}</span></div>`;
   }).join("") + (sorted.length > CAP ? `<div class="q"><span class="qt" style="color:var(--muted)">… ещё ${fmt(sorted.length - CAP)}</span></div>` : "");
   div.appendChild(ql);
 }
