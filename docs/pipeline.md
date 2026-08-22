@@ -60,20 +60,20 @@ float32 distance). Автокалибровка порогов для серве
 и не валит прогон; готовые `.bin` пропускаются (skip-if-exists); app.py автоматически
 дожимает skipped-варианты повторным запуском (`retries < 3`).
 
-### 5a. Автоаренда RAM на Vast.ai (`pipeline_lib/remote.py`)
-`build_trees()` в `run.py` сравнивает `need_gb(n) = n²·4·2.2` с `MemAvailable`. Если не
-влезает — `build_remote()`: ступень RAM `pick_ram_step` (need×1.25+16 → 128…1024 ГБ),
-поиск самого дешёвого verified-оффера с `cpu_ram ≥` ступени (`reliability ≥ 0.95`,
-`direct_port_count ≥ 10`, `inet_down ≥ 200`, цена ≤ `VASTAI_MAX_DPH`), создание через
-встроенный PyTorch-шаблон (`template_hash f88cf873…`, в нём sshd+numpy+scipy), SSH-ключ
-аккаунта `~/.ssh/id_ed25519` (проверяется/добавляется через `/api/v0/ssh/` ДО создания),
-endpoint как в vast CLI: `public_ipaddr + ports["22/tcp"][0].HostPort`, фолбэк на
-`ssh_host:ssh_port`. Внимание: `scp` берёт порт через `-P`, `ssh` — через `-p`.
-На машине выполняется `REMOTE_SCRIPT` (тот же алгоритм, что `build_all`), домой
-скачиваются `{variant}_{hard,soft,avg}.bin` + `thr.json`; размер дерева валидируется
-(n−1 слияний). `finally: destroy` — машина уничтожается при любом исходе, стоимость
-аренды пишется в `status.json` → `costs.json` (`vast_usd`). Деревья с удалённой машины
-дают идентичные разбиения (проверено на всех порогах; байтовая разница ~3e-7 из-за BLAS).
+### 5a. Автоаренда GPU на Vast.ai (`pipeline_lib/remote.py` + `gpu_hac.py`)
+`build_trees()` в `run.py` сравнивает `n²·4·2.2` с `MemAvailable`; если локально не влезает —
+`build_remote()`: ступень VRAM `pick_vram_step` (float32 `n²·4·2.3`, иначе float16 → 24/48/80/94/140 ГБ),
+поиск самого дешёвого verified-оффера (`gpu_ram ≥`, `num_gpus=1`, `reliability ≥ 0.95`,
+`direct_port_count ≥ 10`, `cuda ≥ 12`, цена ≤ `VASTAI_GPU_MAX_DPH`), создание через встроенный
+PyTorch-шаблон (`template_hash f88cf873…`: sshd+torch+numpy), SSH-ключ аккаунта `~/.ssh/id_ed25519`
+(проверяется/добавляется через `/api/v0/ssh/` ДО создания), endpoint как в vast CLI:
+`public_ipaddr + ports["22/tcp"][0].HostPort`, фолбэк `ssh_host:ssh_port`. `scp -P`, `ssh -p`.
+На карте выполняется `gpu_hac.py`: матрица дистанций блоками, затем **nearest-neighbor chain**
+для complete/single/average (Lance–Williams по строке, O(n) на шаг) → полное дерево n−1 слияний,
+отсортированное как у scipy. Домой: `{variant}_{hard,soft,avg}.bin` + `thr.json`; размер дерева
+валидируется; `finally: destroy`; аренда → `costs.json` (`vast_usd`).
+Проверка на полном ядре 104 602 смысла vs scipy: avg/soft — разбиения идентичны на всех порогах,
+hard — 99.3–99.9 % папок (float-ничьи в complete-linkage). CPU-путь удалён намеренно.
 
 ### 6. Гео-разрез
 `split_by_geo()`: кластер, внутри которого больше одного гео-ключа, режется по гео.

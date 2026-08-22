@@ -8,7 +8,7 @@ import numpy as np
 
 from . import ctx
 from .cluster import apply_slice, base_labels, build_all, labels_from_bin, save_thresholds, trees_ready
-from .remote import avail_gb, build_remote, need_gb
+from .remote import avail_gb, build_remote
 from .config import P_COARSE, P_FINE
 from .config import DERIVED, METHODS, PRICE, TITLES, USD_RUB
 from .ctx import set_status
@@ -22,7 +22,8 @@ from .morpho import analyze
 async def build_trees(emb, vkey, data_dir, pct_from, pct_to, n_reps):
     """Деревья локально, если RAM хватает; иначе — на арендованной машине Vast.ai.
     Возвращает (fine, coarse, t_fine, t_coarse)."""
-    need, avail = need_gb(emb.shape[0]), avail_gb()
+    n = emb.shape[0]
+    need, avail = n * n * 4 * 2.2 / 1e9, avail_gb()  # полная матрица в RAM для локального scipy
     if need <= avail:
         return build_all(emb, vkey, data_dir, pct_from, pct_to)
     tf, tc = await build_remote(emb, vkey, data_dir, P_FINE, P_COARSE)

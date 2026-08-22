@@ -22,7 +22,7 @@ seo-cluster (fallback-ключи) → локальный `.env` (приорит�
 | `DEEPSEEK_API_KEY` | интенты |
 | `GEMINI_RPM` | лимит запросов/мин для Gemini (дефолт 15000) |
 | `DEEPSEEK_MODEL` / `DEEPSEEK_REASONING` / `DEEPSEEK_EFFORT` / `DEEPSEEK_TEMP` | модель и ризонинг DeepSeek |
-| `VASTAI_API_KEY` / `VASTAI_MAX_DPH` / `VASTAI_SSH_KEY` | автоаренда RAM-машины для HAC, потолок $/час, путь к приватному ключу (дефолт `~/.ssh/id_ed25519`; публичный должен быть в аккаунте Vast.ai) |
+| `VASTAI_API_KEY` / `VASTAI_GPU_MAX_DPH` / `VASTAI_SSH_KEY` | автоаренда GPU для HAC, потолок $/час (дефолт 4.0), путь к приватному ключу (дефолт `~/.ssh/id_ed25519`; публичный должен быть в аккаунте Vast.ai) |
 
 ## Обновление
 

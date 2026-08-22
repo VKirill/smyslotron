@@ -17,7 +17,7 @@ flowchart TB
     DB[("semantika.db — SQLite WAL<br>users · sessions · projects<br>mapping_templates · user_prefs")]
     FS[("projects/&lt;uid&gt;/&lt;pid&gt;/<br>keys.csv · emb_*.npy · data/*.bin<br>status.json · costs.json")]
     EXT["Внешние API:<br>OpenAI · Gemini · Voyage · DashScope · DeepSeek"]
-    VAST["Vast.ai (автоаренда RAM)<br>деревья для больших ядер"]
+    VAST["Vast.ai (автоаренда GPU)<br>HAC на CUDA для больших ядер"]
     EMB[("embeddings.db<br>глобальная база векторов")]
 
     IDX -->|"REST /semantika/api"| APP
@@ -79,6 +79,6 @@ Angie (nginx-форк) проксирует `https://neurosemantic.ru/semantika/
 ## Ограничения и допущения
 
 - Один воркер: пайплайны выполняются последовательно (очередь FIFO).
-- Лимитов на число проектов и фраз нет; загрузка ≤ 200 МБ. Потолок HAC по RAM снимается автоарендой Vast.ai.
+- Лимитов на число проектов и фраз нет; загрузка ≤ 200 МБ. Потолок HAC по RAM снимается автоарендой GPU на Vast.ai (104К смыслов — 7 мин, ~$0.35).
 - Авторизация без подтверждения почты; rate-limit на auth-эндпоинты in-memory.
 - Всё состояние — SQLite + файлы; внешних очередей/кэшей/брокеров нет.
