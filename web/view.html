@@ -28,9 +28,9 @@
   .csvbtn{color:var(--accent); text-decoration:none; font-size:13px;
     border:1px solid var(--border); border-radius:8px; padding:4px 12px}
   .csvbtn:hover{border-color:var(--accent)}
-  .grp.actions{display:flex; flex-direction:column; gap:7px}
-  .grp.actions .csvbtn{display:block; text-align:center; padding:8px 12px;
-    background:var(--panel2); color:var(--text); font-weight:600}
+  .grp.actions{display:flex; gap:7px}
+  .grp.actions .csvbtn{flex:1; display:block; text-align:center; padding:8px 6px;
+    background:var(--panel2); color:var(--text); font-weight:600; white-space:nowrap}
   .grp.actions .csvbtn:hover{border-color:var(--accent); color:#fff}
   .grp.actions #savesl{background:var(--accent); border-color:var(--accent); color:#fff}
   .grp.actions #savesl:hover{filter:brightness(1.12)}
@@ -188,8 +188,8 @@
 <main>
   <aside>
     <div class="grp actions">
-      <a id="savesl" class="csvbtn" href="#" title="Зафиксировать текущий срез (вариант, режим, сила, мин. размер) как кластеризацию проекта: серверный CSV и интенты кластеров будут считаться по нему">💾 Сохранить срез</a>
-      <a id="slicebtn" class="csvbtn" href="#" title="Выгрузить кластеры ровно с текущими настройками (вариант, режим, сила, мин. размер)">⬇ Текущий срез в CSV</a>
+      <a id="savesl" class="csvbtn" href="#" title="Зафиксировать текущий срез (вариант, режим, сила, мин. размер) как кластеризацию проекта: серверный CSV и интенты кластеров будут считаться по нему">💾 Сохранить</a>
+      <a id="slicebtn" class="csvbtn" href="#" title="Выгрузить кластеры ровно с текущими настройками (вариант, режим, сила, мин. размер)">⬇ Скачать срез</a>
     </div>
     <div class="grp">
       <label>Эмбеддинги</label>
