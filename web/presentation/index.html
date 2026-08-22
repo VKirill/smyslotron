@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Смыслотрон — презентация</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a22; --panel2:#1c2130; --border:#262c3d;
+    --text:#dde3ee; --muted:#8b93a7; --accent:#5b8cff; --green:#38c793; --warn:#e5a93d;
+  }
+  *{box-sizing:border-box; margin:0}
+  html,body{height:100%}
+  body{background:var(--bg); color:var(--text); overflow:hidden;
+    font:18px/1.55 "Inter","Segoe UI",-apple-system,Roboto,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  .slide{position:absolute; inset:0; display:none; flex-direction:column;
+    justify-content:center; align-items:center; padding:6vh 8vw; text-align:center}
+  .slide.on{display:flex; animation:fadeIn .35s ease}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(14px)} to{opacity:1; transform:none}}
+  .kicker{color:var(--accent); font-weight:800; text-transform:uppercase;
+    letter-spacing:.14em; font-size:clamp(12px,1.3vw,15px); margin-bottom:2vh}
+  h1{font-size:clamp(34px,5.2vw,72px); font-weight:800; line-height:1.12; letter-spacing:-.02em}
+  h2{font-size:clamp(26px,3.6vw,50px); font-weight:800; line-height:1.15;
+    letter-spacing:-.02em; margin-bottom:3.5vh; max-width:26ch}
+  .sub{color:var(--muted); font-size:clamp(16px,1.8vw,24px); max-width:52ch; margin-top:2.5vh}
+  .accent{color:var(--accent)} .green{color:var(--green)}
+  .big{font-size:clamp(20px,2.4vw,32px); max-width:44ch}
+  .cards{display:flex; gap:2vw; flex-wrap:wrap; justify-content:center; max-width:1200px}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:16px;
+    padding:3vh 2vw; flex:1 1 240px; max-width:360px; text-align:left}
+  .card .ico{font-size:clamp(24px,2.6vw,36px); margin-bottom:1.2vh}
+  .card b{display:block; font-size:clamp(16px,1.6vw,22px); margin-bottom:.8vh}
+  .card span{color:var(--muted); font-size:clamp(13.5px,1.3vw,17px); line-height:1.5}
+  .imgwrap{max-width:min(1100px,82vw); margin-top:3vh}
+  .imgwrap img{width:100%; border-radius:16px; border:1px solid var(--border);
+    box-shadow:0 24px 80px rgba(0,0,0,.5)}
+  table{border-collapse:collapse; margin-top:3vh; font-size:clamp(14px,1.5vw,20px)}
+  th,td{padding:1.4vh 2vw; border-bottom:1px solid var(--border); text-align:left}
+  th{color:var(--muted); font-weight:600; font-size:.85em; text-transform:uppercase; letter-spacing:.06em}
+  td:first-child{color:var(--muted)}
+  .steps{display:flex; gap:2.5vw; margin-top:4vh; flex-wrap:wrap; justify-content:center}
+  .step{background:var(--panel); border:1px solid var(--border); border-radius:16px;
+    padding:3vh 2.2vw; width:min(300px,26vw); min-width:230px; text-align:left; position:relative}
+  .step .num{position:absolute; top:-18px; left:22px; width:36px; height:36px; border-radius:50%;
+    background:var(--accent); color:#fff; font-weight:800; display:flex;
+    align-items:center; justify-content:center; font-size:17px}
+  .step b{display:block; margin:1vh 0 .8vh; font-size:clamp(15px,1.5vw,20px)}
+  .step span{color:var(--muted); font-size:clamp(13px,1.25vw,16px)}
+  .demo{display:inline-flex; align-items:center; gap:14px; margin-top:4.5vh;
+    background:var(--accent); color:#fff; border-radius:14px; padding:2vh 3vw;
+    font-weight:800; font-size:clamp(18px,2vw,26px)}
+  /* сравнение фраз */
+  .phrases{display:flex; flex-direction:column; gap:1.4vh; margin-top:3vh; align-items:center}
+  .ph{background:var(--panel); border:1px solid var(--border); border-radius:12px;
+    padding:1.4vh 2.4vw; font-size:clamp(15px,1.8vw,24px)}
+  .ph.match{border-color:var(--green); box-shadow:0 0 24px rgba(56,199,147,.15)}
+  .simline{color:var(--green); font-weight:800; font-size:clamp(15px,1.6vw,22px)}
+  /* низ */
+  .hud{position:fixed; left:0; right:0; bottom:0; display:flex; align-items:center;
+    justify-content:space-between; padding:14px 22px; color:var(--muted); font-size:13px; z-index:5}
+  .dots{display:flex; gap:7px}
+  .dots i{width:8px; height:8px; border-radius:50%; background:var(--border); cursor:pointer}
+  .dots i.on{background:var(--accent)}
+  .bar{position:fixed; top:0; left:0; height:3px; background:var(--accent); z-index:5; transition:width .3s}
+  .hint{opacity:.7}
+  ul.plain{list-style:none; text-align:left; margin-top:3vh; font-size:clamp(16px,1.9vw,25px); line-height:2}
+  ul.plain li::before{content:"— "; color:var(--accent); font-weight:800}
+</style>
+</head>
+<body>
+
+<!-- 1. Титул -->
+<section class="slide">
+  <div class="kicker">neurosemantic.ru/semantika</div>
+  <h1>Смыслотрон</h1>
+  <p class="sub big">Раскладывает тысячи поисковых запросов по смыслу —
+  <b class="accent">за минуты</b>, а не за недели ручной работы</p>
+  <div class="imgwrap"><img src="hero.jpg" alt="Из хаоса фраз — в аккуратные папки"></div>
+</section>
+
+<!-- 2. Проблема -->
+<section class="slide">
+  <div class="kicker">Проблема</div>
+  <h2>Люди ищут одно и то же тысячами разных фраз</h2>
+  <div class="phrases">
+    <div class="ph">«фотосессия для беременных»</div>
+    <div class="ph">«фотосъёмка в ожидании малыша»</div>
+    <div class="ph">«фото беременности студия цена»</div>
+  </div>
+  <p class="sub">Чтобы получать клиентов из поиска, надо понять: какие страницы делать
+  на сайте и какая страница отвечает на какие запросы. Вручную разобрать
+  30 000 фраз — недели монотонной работы.</p>
+</section>
+
+<!-- 3. Что делает -->
+<section class="slide">
+  <div class="kicker">Решение</div>
+  <h2>Загрузил список фраз — получил папки-смыслы</h2>
+  <p class="sub big">Одна папка = одна тема = одна страница сайта.<br>
+  Как будто высыпал мешок лего, а робот разложил детали по цветам и формам —
+  только вместо деталей запросы, а вместо цвета <b class="accent">смысл</b>.</p>
+</section>
+
+<!-- 4. Как работает -->
+<section class="slide">
+  <div class="kicker">Как это работает</div>
+  <h2>Нейросеть снимает «отпечаток смысла» каждой фразы</h2>
+  <p class="sub">Фразы с похожими отпечатками слипаются в группы. Поэтому система
+  понимает синонимы, перестановки слов и даже разные языки:
+  <b class="green">«фото в стиле миядзаки» = «фото в стиле ghibli»</b> — сходство 0.96.</p>
+  <div class="imgwrap"><img src="pipeline.jpg" alt="Пайплайн: таблица → дедуп → эмбеддинги → дерево → папки"></div>
+</section>
+
+<!-- 5. Фишка: ползунок -->
+<section class="slide">
+  <div class="kicker">Фишка №1</div>
+  <h2>Крупность групп крутишь сам — мгновенно</h2>
+  <p class="sub big">Сервер один раз строит «дерево слияний», а разрез делает твой браузер.
+  Двигаешь ползунок — 30 000 фраз перегруппировались <b class="accent">за долю секунды</b>,
+  без пересчёта и без доплат. Как зум на карте: от районов до отдельных домов.</p>
+</section>
+
+<!-- 6. Фишка: 11 моделей -->
+<section class="slide">
+  <div class="kicker">Фишка №2</div>
+  <h2>11 нейросетей смотрят на твоё ядро</h2>
+  <div class="cards">
+    <div class="card"><div class="ico">🤖</div><b>OpenAI · Gemini · Voyage · Qwen</b>
+      <span>лучшие модели эмбеддингов, у каждой свой «характер» группировки</span></div>
+    <div class="card"><div class="ico">🟩</div><b>Зелёная папка</b>
+      <span>все модели согласны — группе можно верить не глядя</span></div>
+    <div class="card"><div class="ico">🟥</div><b>Красная папка</b>
+      <span>модели разошлись — вот куда смотреть руками. Экономит 90% проверки</span></div>
+  </div>
+</section>
+
+<!-- 7. Фишка: дедуп -->
+<section class="slide">
+  <div class="kicker">Фишка №3</div>
+  <h2>Умная чистка дублей — без потери смысла</h2>
+  <div class="phrases">
+    <div class="ph match">«фотосессия семейная» = «семейная фотосессия» <b class="green">→ склеит</b></div>
+    <div class="ph">«молитва матери о дочери» ≠ «молитва дочери о матери» <b style="color:var(--warn)">→ не тронет</b></div>
+  </div>
+  <p class="sub">Честные дубли схлопываются, их частотности складываются.
+  А фразы из одинаковых слов, но с разным смыслом, остаются отдельными —
+  система проверяет и порядок слов, и смысловой отпечаток.</p>
+</section>
+
+<!-- 8. Фишка: интенты -->
+<section class="slide">
+  <div class="kicker">Фишка №4</div>
+  <h2>ИИ помечает, чего хочет человек в каждой фразе</h2>
+  <div class="cards">
+    <div class="card"><div class="ico">📖</div><b>Почитать</b><span>«как выбрать позу для фото» → пишем статью</span></div>
+    <div class="card"><div class="ico">🛒</div><b>Купить</b><span>«фотосессия цена записаться» → продающая страница</span></div>
+    <div class="card"><div class="ico">⚖️</div><b>Сравнить</b><span>«лучший фотограф отзывы» → подборка / сравнение</span></div>
+  </div>
+  <p class="sub">Разметка пофразовая: крути группы как угодно — метки не слетают.
+  30 000 фраз ≈ 10 ₽.</p>
+</section>
+
+<!-- 9. Сравнение с классикой -->
+<section class="slide">
+  <div class="kicker">Почему не классические кластеризаторы</div>
+  <h2>Быстрее, дешевле, работает там, где классика слепа</h2>
+  <table>
+    <tr><th></th><th>Классика (по выдаче)</th><th class="accent">Смыслотрон</th></tr>
+    <tr><td>Ядро 30–50К фраз</td><td>тысячи ₽, часы сбора</td><td><b class="green">~150 ₽, минуты</b></td></tr>
+    <tr><td>Редкие и новые запросы</td><td>выдачи нет — хвост разваливается</td><td><b class="green">группируются наравне</b></td></tr>
+    <tr><td>Поменять крупность групп</td><td>пересбор проекта</td><td><b class="green">ползунок, мгновенно</b></td></tr>
+    <tr><td>Повторный прогон</td><td>выдача изменилась — другие группы</td><td><b class="green">результат стабилен</b></td></tr>
+  </table>
+</section>
+
+<!-- 10. Что ещё -->
+<section class="slide">
+  <div class="kicker">И это ещё не всё</div>
+  <h2>Мелочи, которые экономят часы</h2>
+  <ul class="plain">
+    <li>гео-разрез: «в москве» и «в казани» не смешаются, свой регион можно назначить</li>
+    <li>поиск как в Вордстате: <b>[порядок слов]</b>, <b>"состав фразы"</b>, <b>!форма</b> — и полные регэкспы</li>
+    <li>докидывай фразы в проект бесконечно — дубли схлопнутся, доплата только за новое</li>
+    <li>объединение любых CSV прямо в браузере, шаблоны настроек, экспорт ровно того, что видишь</li>
+  </ul>
+</section>
+
+<!-- 11. Как начать -->
+<section class="slide">
+  <div class="kicker">Как начать</div>
+  <h2>Три шага до готовой структуры</h2>
+  <div class="steps">
+    <div class="step"><div class="num">1</div><b>Загрузи файл</b>
+      <span>CSV/TXT из Keys.so, Key Collector или Вордстата — любой формат</span></div>
+    <div class="step"><div class="num">2</div><b>Подтверди колонки</b>
+      <span>система сама угадывает разделитель и колонки, а знакомые форматы запоминает</span></div>
+    <div class="step"><div class="num">3</div><b>Крути и выгружай</b>
+      <span>через несколько минут — интерактивная карта смыслов и CSV с группами</span></div>
+  </div>
+  <div class="demo">А теперь покажу вживую →</div>
+</section>
+
+<div class="bar" id="bar"></div>
+<div class="hud">
+  <span class="hint">← → или клик — листать</span>
+  <div class="dots" id="dots"></div>
+  <span id="pos"></span>
+</div>
+
+<script>
+"use strict";
+const slides = [...document.querySelectorAll(".slide")];
+const dots = document.getElementById("dots");
+slides.forEach((_, i) => {
+  const d = document.createElement("i");
+  d.onclick = e => { e.stopPropagation(); go(i); };
+  dots.appendChild(d);
+});
+let cur = Math.min(slides.length - 1, Math.max(0, +location.hash.slice(1) - 1 || 0));
+function go(i){
+  cur = Math.max(0, Math.min(slides.length - 1, i));
+  slides.forEach((s, k) => s.classList.toggle("on", k === cur));
+  [...dots.children].forEach((d, k) => d.classList.toggle("on", k === cur));
+  document.getElementById("pos").textContent = (cur + 1) + " / " + slides.length;
+  document.getElementById("bar").style.width = ((cur + 1) / slides.length * 100) + "%";
+  history.replaceState(null, "", "#" + (cur + 1));
+}
+addEventListener("keydown", e => {
+  if (["ArrowRight", "PageDown", " ", "Enter"].includes(e.key)){ e.preventDefault(); go(cur + 1); }
+  if (["ArrowLeft", "PageUp", "Backspace"].includes(e.key)){ e.preventDefault(); go(cur - 1); }
+  if (e.key === "Home") go(0);
+  if (e.key === "End") go(slides.length - 1);
+});
+addEventListener("click", e => { if (!e.target.closest("a")) go(cur + 1); });
+go(cur);
+</script>
+</body>
+</html>
