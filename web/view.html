@@ -223,7 +223,9 @@
       <div class="hint">операторы как в Вордстате: <b>[слова]</b> — подряд и в этом
       порядке; <b>"слова"</b> — фраза ровно из этих слов; <b>!слово</b> — ровно такая
       форма (работает и внутри скобок/кавычек); <b>!!</b> в начале — показать НЕ
-      соответствующие. Без «!» слово ищется в любой форме (по леммам)</div>
+      соответствующие; <b>/регэксп/</b> — регулярное выражение (флаги после второго
+      слэша, по умолчанию регистронезависимо). Без «!» слово ищется в любой форме
+      (по леммам)</div>
     </div>
     <div class="grp">
       <label>Режим анализа</label>
@@ -465,7 +467,7 @@ async function getCols(){
     // сравнение шаблонов: колонка = шаблон со СВОИМИ вариантом/режимом/срезом.
     // Поиск, зашитый в шаблон, не применяем (он «прячет» папки в чужом проекте),
     // а вот общий «Поиск по фразам» из сайдбара действует на все колонки
-    const gq = state.search.trim().toLowerCase();
+    const gq = normQ(state.search);
     const cols = [];
     for (const [ci, t] of cmp.entries()){
       const p = (t.cols || []).find(x => META.provs.includes(x)) || META.provs[0];
@@ -485,11 +487,11 @@ async function getCols(){
     const lab = cutLabels(tree, k);
     const clusters = clusterize(lab);
     return state.anQ.map((aq, ai) => ({prov: p, tree, k, clusters, lab,
-      an: ai, anq: aq, q: (aq || "").trim().toLowerCase(), key: p + "#a" + ai}));
+      an: ai, anq: aq, q: normQ(aq), key: p + "#a" + ai}));
   }
   const provs = state.cols;
   const cols = [];
-  const gq = state.search.trim().toLowerCase();
+  const gq = normQ(state.search);
   for (const p of provs){
     const tree = await loadTree(p + "_" + state.mode);
     const k = kFromSlider();
@@ -506,6 +508,11 @@ function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
    !слово    — ровно такая форма слова (работает и внутри [ ] и " ");
    !!запрос  — инверсия: показать фразы, НЕ соответствующие фильтру. */
 let _mq = {q: null};
+// нормализация запроса: обычные — в нижний регистр, /регэкспы/ — как есть
+function normQ(s){
+  s = (s || "").trim();
+  return /^(!!)?\/.+\/[a-z]*$/i.test(s) ? s : s.toLowerCase();
+}
 function _tokenize(s){
   // [{w, ex}] — слово + флаг «точная форма»
   return s.split(/\s+/).filter(Boolean)
@@ -516,9 +523,12 @@ function _compileQ(q){
   if (_mq.q === q) return _mq;
   let neg = false, s = q;
   if (s.startsWith("!!")){ neg = true; s = s.slice(2).trim(); }
-  let seq = null, quote = null, exact = null, subs = null, txt = "";
+  let seq = null, quote = null, exact = null, subs = null, txt = "", re = null;
   let m;
-  if ((m = s.match(/^\[(.*)\]$/))){
+  if ((m = s.match(/^\/(.+)\/([a-z]*)$/))){
+    // регулярное выражение: /паттерн/флаги (без флагов — регистронезависимо)
+    try{ re = new RegExp(m[1], m[2] || "i"); }catch(err){ txt = s; }
+  } else if ((m = s.match(/^\[(.*)\]$/))){
     seq = _tokenize(m[1]);
     if (!seq.length) seq = null;
   } else if ((m = s.match(/^["«](.*)["»]$/))){
@@ -529,15 +539,16 @@ function _compileQ(q){
     for (const t of _tokenize(s)) (t.ex ? exact : subs).push(t.w);
     if (!exact.length){ exact = null; txt = subs.join(" "); subs = null; }
   } else txt = s;
-  _mq = {q, neg, seq, quote, exact, subs, txt};
+  _mq = {q, neg, seq, quote, exact, subs, txt, re};
   return _mq;
 }
 // слово запроса подходит к слову фразы: точное совпадение, а без «!» — ещё и по лемме
 function _wOk(t, raw, lem, k){ return raw[k] === t.w || (!t.ex && lem && lem[k] === t.w); }
 function matchQ(i, q){
   const c = _compileQ(q);
-  if (!c.seq && !c.quote && !c.exact && !c.txt) return true;
+  if (!c.seq && !c.quote && !c.exact && !c.txt && !c.re) return true;
   const hitText = (t, lt) => {
+    if (c.re) return c.re.test(t);
     const low = t.toLowerCase();
     if (c.txt) return low.includes(c.txt);
     const raw = low.split(/\s+/);
@@ -570,6 +581,16 @@ function matchQ(i, q){
 }
 function hi(s, q){
   if (!q) return esc(s);
+  const rm = q.replace(/^!!/, "").match(/^\/(.+)\/([a-z]*)$/);
+  if (rm){
+    try{
+      const mm = s.match(new RegExp(rm[1], rm[2] || "i"));
+      if (mm && mm[0])
+        return esc(s.slice(0, mm.index)) + "<mark>" + esc(mm[0]) + "</mark>" +
+               esc(s.slice(mm.index + mm[0].length));
+    }catch(err){}
+    return esc(s);
+  }
   q = q.replace(/^!!/, "").trim().replace(/^[\["«]/, "").replace(/[\]"»]$/, "")
        .replace(/(^|\s)!(\S)/g, "$1$2").trim();
   if (!q) return esc(s);
@@ -638,7 +659,7 @@ async function copyCluster(c, btn){
 function expandInto(div, c, onlyMatches, colQ){
   const ql = document.createElement("div");
   ql.className = "qlist";
-  const sq = (colQ !== undefined ? colQ : state.search.trim().toLowerCase());
+  const sq = (colQ !== undefined ? colQ : normQ(state.search));
   let pool = c.idxs;
   if (onlyMatches && sq) pool = pool.filter(i => matchQ(i, sq));
   const sorted = [...pool].sort((x, y) => {
