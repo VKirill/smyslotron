@@ -81,7 +81,8 @@ function render(){
       const nFolders = clusters.length + nSmallF;
       const cntHtml = `<span title="${fmt(clusters.length)} групп + ${fmt(nSmallF)} в «Без группы»">${fmt(nFolders)} папок</span>
         <button class="copy colcopy" title="Скопировать уникальные фразы всех показанных папок колонки (без дублей и «Без группы»)">⧉</button>` +
-        (q ? `<button class="copy coltrash" title="Отправить в корзину ВСЕ фразы проекта, найденные этим фильтром — они выпадут из кластеризации">🗑</button>` : "");
+        (q ? `<button class="copy coltrash" title="Отправить в корзину ВСЕ фразы проекта, найденные этим фильтром — они выпадут из кластеризации">🗑</button>` : "") +
+        `<button class="copy colmove" title="Перенести фразы показанных папок в другой проект (существующий или новый) — здесь они уйдут в корзину, ничего не теряется">📤</button>`;
 
       const head = document.createElement("div");
       head.className = "colhead";
@@ -129,6 +130,15 @@ function render(){
         if (!confirm(`Отправить в корзину ${hits.length.toLocaleString("ru-RU")} фраз, найденных фильтром «${q}»?\n\nОни перестанут участвовать в кластеризации; вернуть можно из корзины на табе «Фильтры».`)) return;
         for (const i of hits) TRASH.add(Q[i]);
         saveTrash(); render();
+      };
+      const cmv = head.querySelector(".colmove");
+      if (cmv) cmv.onclick = e => {
+        e.stopPropagation();
+        // все уникальные фразы показанных папок + их дубли (перенос смысла целиком)
+        const phrases = [];
+        for (const c of clusters)
+          for (const i of c.idxs){ phrases.push(Q[i]); if (D && D[i]) phrases.push(...D[i]); }
+        openMoveDialog(phrases, clusters.length);
       };
       const ccb = head.querySelector(".colcopy");
       if (ccb) ccb.onclick = async e => {

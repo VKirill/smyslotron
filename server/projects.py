@@ -260,6 +260,95 @@ async def clone_project(pid: str, user: sqlite3.Row = Depends(current_user)):
     return {"id": new_pid}
 
 
+@router.post("/projects/{pid}/move")
+async def move_phrases(pid: str, request: Request, user: sqlite3.Row = Depends(current_user)):
+    """Перенос фраз из проекта в другой (существующий или новый). Фразы берутся
+    с их частотами/флагами из keys.csv источника (включая склеенные дубли по
+    переданным представителям), в приёмнике — штатный append (дубли схлопнутся),
+    в источнике остаются (убираются в корзину на клиенте — ничего не теряется).
+    Вход: {phrases: [..], target: "<pid>" | null, name: "<имя нового>"}."""
+    src = own_project(pid, user)
+    body = await request.json()
+    wanted = {str(p).strip().lower() for p in (body.get("phrases") or []) if str(p).strip()}
+    if not wanted:
+        raise HTTPException(400, "Нет фраз для переноса")
+    # строки источника по выбранным фразам
+    rows = []
+    with open(project_dir(src) / "keys.csv", encoding="utf-8-sig") as f:
+        for r in csv.DictReader(f, delimiter=";"):
+            q = (r.get("Запрос") or "").strip()
+            if q and q.lower() in wanted:
+                rows.append([q, int(r.get("Базовая частотность") or 0),
+                             int(r.get("Точная частотность") or 0),
+                             int(r.get("Очень точная частотность") or 0),
+                             r.get("Топоним") or "0", r.get("Вопрос") or "0"])
+    if not rows:
+        raise HTTPException(400, "Фразы не найдены в ядре проекта")
+
+    target = body.get("target")
+    if target:
+        dst = own_project(str(target), user)
+        if dst["status"] == "running":
+            raise HTTPException(400, "Целевой проект сейчас обрабатывается — подожди")
+        pdir = project_dir(dst)
+        existing, index = [], {}
+        with open(pdir / "keys.csv", encoding="utf-8-sig") as f:
+            for r in csv.DictReader(f, delimiter=";"):
+                q = (r.get("Запрос") or "").strip()
+                if not q:
+                    continue
+                item = [q, int(r.get("Базовая частотность") or 0),
+                        int(r.get("Точная частотность") or 0),
+                        int(r.get("Очень точная частотность") or 0),
+                        r.get("Топоним") or "0", r.get("Вопрос") or "0"]
+                existing.append(item)
+                index[q.lower()] = item
+        added = 0
+        for it in rows:
+            ex = index.get(it[0].lower())
+            if ex:
+                ex[1], ex[2], ex[3] = max(ex[1], it[1]), max(ex[2], it[2]), max(ex[3], it[3])
+            else:
+                existing.append(it)
+                index[it[0].lower()] = it
+                added += 1
+        with open(pdir / "keys.csv", "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f, delimiter=";")
+            w.writerow(["Запрос", "Базовая частотность", "Точная частотность",
+                        "Очень точная частотность", "Топоним", "Вопрос"])
+            w.writerows(existing)
+        if added:
+            ddir = pdir / "data"
+            if ddir.exists():
+                for fb in ddir.glob("*.bin"):
+                    fb.unlink(missing_ok=True)
+                (ddir / "meta.json").unlink(missing_ok=True)
+        entry = f"{time.strftime('%F')} +{added} из «{src['name'][:30]}»"
+        with db() as c:
+            c.execute("UPDATE projects SET rows=?, status=CASE WHEN ?>0 THEN 'queued' ELSE status END, "
+                      "task='cluster', error='', retries=0, history=CASE WHEN history='' THEN ? "
+                      "ELSE history || ' · ' || ? END WHERE id=?",
+                      (len(existing), added, entry, entry, dst["id"]))
+        return {"target": dst["id"], "added": added, "moved": len(rows), "new": False}
+
+    # новый проект из перенесённых фраз
+    name = (body.get("name") or f"{src['name'][:50]} — выборка").strip()[:80]
+    new_pid = secrets.token_hex(8)
+    pdir = PROJECTS / str(user["id"]) / new_pid
+    pdir.mkdir(parents=True)
+    with open(pdir / "keys.csv", "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f, delimiter=";")
+        w.writerow(["Запрос", "Базовая частотность", "Точная частотность",
+                    "Очень точная частотность", "Топоним", "Вопрос"])
+        w.writerows(rows)
+    with db() as c:
+        c.execute("INSERT INTO projects(id,user_id,name,status,task,rows,created,variants) "
+                  "VALUES(?,?,?,?,?,?,?,?)",
+                  (new_pid, user["id"], name, "queued", "cluster", len(rows),
+                   time.strftime("%F %T"), src["variants"] or "openai,gemini"))
+    return {"target": new_pid, "added": len(rows), "moved": len(rows), "new": True}
+
+
 @router.post("/projects/{pid}/rename")
 async def rename_project(pid: str, request: Request,
                          user: sqlite3.Row = Depends(current_user)):

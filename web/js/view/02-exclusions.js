@@ -76,6 +76,11 @@ function showCtx(e, c){
       saveTrash(); render();
     }],
     ["⧉", "Копировать фразы кластера", () => copyCluster(c, document.createElement("button"))],
+    ["📤", `Перенести кластер в другой проект`, () => {
+      const ph = [];
+      for (const i of c.idxs){ ph.push(Q[i]); if (D && D[i]) ph.push(...D[i]); }
+      openMoveDialog(ph, 1);
+    }],
   ];
   for (const [ico, label, fn] of items){
     const d = document.createElement("div");
@@ -111,3 +116,53 @@ function renderRules(){
   }
 }
 
+
+/* ---------- перенос фраз в другой проект ---------- */
+async function openMoveDialog(phrases, nFolders){
+  hideCtx();
+  if (!phrases.length){ alert("Нечего переносить"); return; }
+  let projects = [];
+  try{
+    const r = await fetch("api/projects", {credentials: "same-origin"});
+    projects = (await r.json()).filter(p => p.id !== PID);
+  }catch(e){}
+  const m = document.createElement("div");
+  m.id = "ctxmenu";
+  m.className = "prespop";
+  m.style.minWidth = "360px";
+  m.onclick = ev => ev.stopPropagation();
+  const opts = projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)} (${fmt(p.rows)} фраз)</option>`).join("");
+  m.innerHTML = `<div class="pscore" style="font-size:16px">📤 Перенести ${fmt(phrases.length)} фраз из ${fmt(nFolders)} папок</div>
+    <div class="pfield"><b>куда</b>
+      <select id="mvTarget" style="width:100%; margin-top:4px"><option value="">— новый проект —</option>${opts}</select></div>
+    <div class="pfield" id="mvNameRow"><b>название нового проекта</b>
+      <input id="mvName" style="width:100%; margin-top:4px; padding:6px 8px; background:var(--panel2); border:1px solid var(--border); border-radius:7px; color:var(--text); font:inherit" value="${esc(($("#ptitle") && $("#ptitle").textContent) || "Проект")} — ${esc(state.search.trim() || "выборка")}"></div>
+    <div class="pfield" style="color:var(--muted); font-size:12.5px">Фразы уйдут с частотностями и дублями; здесь они попадут в корзину (вернуть можно в любой момент). Целевой проект пересчитается.</div>
+    <div style="display:flex; gap:8px; margin-top:10px; justify-content:flex-end">
+      <button class="ctxitem" id="mvCancel" style="border:1px solid var(--border)">Отмена</button>
+      <button class="ctxitem" id="mvGo" style="background:var(--accent); color:#fff">Перенести</button></div>`;  // guardian: allow значения через esc()
+  document.body.appendChild(m);
+  m.style.left = Math.max(8, (innerWidth - m.offsetWidth) / 2) + "px";
+  m.style.top = Math.max(8, (innerHeight - m.offsetHeight) / 3) + "px";
+  const sel = m.querySelector("#mvTarget");
+  sel.onchange = () => { m.querySelector("#mvNameRow").style.display = sel.value ? "none" : ""; };
+  m.querySelector("#mvCancel").onclick = hideCtx;
+  m.querySelector("#mvGo").onclick = async () => {
+    const target = sel.value || null;
+    const name = m.querySelector("#mvName").value.trim();
+    m.querySelector("#mvGo").textContent = "⏳";
+    try{
+      const r = await fetch(`api/projects/${PID}/move`, {method: "POST", credentials: "same-origin",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({phrases, target, name})});
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || r.status);
+      // в источнике — в корзину (представители; дубли едут вместе с ними)
+      for (const p of phrases) if (QIDX.has(p)) TRASH.add(p);
+      saveTrash(); hideCtx(); render();
+      alert(d.new
+        ? `Создан новый проект (${fmt(d.added)} фраз), кластеризация запущена. Здесь перенесённые фразы в корзине.`
+        : `Перенесено ${fmt(d.moved)} фраз (новых для проекта: ${fmt(d.added)}), пересчёт запущен. Здесь они в корзине.`);
+    }catch(e){ alert("Ошибка переноса: " + e.message); hideCtx(); }
+  };
+}
