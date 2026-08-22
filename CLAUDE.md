@@ -7,9 +7,11 @@ seo-cluster** — общего кода нет, только `.env` seo-cluster 
 
 ## Стек и запуск
 
-- Python 3.12, FastAPI + SQLite (WAL), без ORM; фронт — vanilla JS, три статических HTML
-- `pipeline.py` — самодостаточный uv-скрипт с inline-deps (httpx, numpy, scipy, pymorphy3); app.py запускает его subprocess'ом через `uv run`
-- Прод: PM2 `semantika-web` → `uv run uvicorn app:app --host 127.0.0.1 --port 8090`; angie проксирует `/semantika/api/` → :8090, статика `web/` отдаётся как `/semantika/` **через симлинки** из `/home/ubuntu/apps/seo-cluster/www/neurosemantic/semantika/`
+- Python 3.12, FastAPI + SQLite (WAL), без ORM; фронт — vanilla JS без сборки
+- Бэкенд — пакет `server/` (config·db·auth·uploads·projects·prefs·prompts·worker·app), `app.py` — шим для PM2
+- Пайплайн — entry `pipeline.py` (inline-deps uv) + пакет `pipeline_lib/` (ctx·config·morpho·dedup·embed·cluster·llm·files·run); запускается subprocess'ом из server/worker.py
+- Фронт: `web/*.html` — только разметка; стили `web/css/`, логика просмотрщика `web/js/view/01…10-*.js` (классические скрипты, порядок загрузки важен; при правках поднимать `?v=` в view.html)
+- Прод: PM2 `semantika-web` → `uv run uvicorn app:app --host 127.0.0.1 --port 8090`; angie проксирует `/semantika/api/` → :8090, статика: `/semantika/` — симлинк каталога `web/` из `/home/ubuntu/apps/seo-cluster/www/neurosemantic/semantika`
 - Деплой фронта = просто сохранить файл в `web/` (симлинки, кэша нет — фетчи с `cache:"no-cache"`). Бэкенд: `pm2 restart semantika-web`
 
 ## Инварианты — не ломать
@@ -58,7 +60,7 @@ curl -s http://127.0.0.1:8090/semantika/api/auth/me                            #
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 
-This project is indexed by GitNexus as **smyslotron** (240 symbols, 517 relationships, 20 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
+This project is indexed by GitNexus as **smyslotron** (1300 symbols, 4441 relationships, 114 execution flows). Use the GitNexus MCP tools to understand code, assess impact, and navigate safely.
 
 > Index stale? Run `node .gitnexus/run.cjs analyze` from the project root — it auto-selects an available runner. No `.gitnexus/run.cjs` yet? `npx gitnexus analyze` (npm 11 crash → `npm i -g gitnexus`; #1939).
 

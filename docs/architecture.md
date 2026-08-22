@@ -10,10 +10,10 @@ flowchart TB
         MRG["merge.html — объединение CSV<br>(полностью клиентский, без API)"]
     end
     subgraph Server["PM2: semantika-web (uvicorn :8090)"]
-        APP["app.py — FastAPI"]
+        APP["server/ — FastAPI (app.py — шим)"]
         WK["worker_loop — очередь<br>(asyncio-таск внутри app.py)"]
     end
-    PIPE["pipeline.py<br>(subprocess: uv run)"]
+    PIPE["pipeline.py + pipeline_lib/<br>(subprocess: uv run)"]
     DB[("semantika.db — SQLite WAL<br>users · sessions · projects<br>mapping_templates · user_prefs")]
     FS[("projects/&lt;uid&gt;/&lt;pid&gt;/<br>keys.csv · emb_*.npy · data/*.bin<br>status.json · costs.json")]
     EXT["Внешние API:<br>OpenAI · Gemini · Voyage · DashScope · DeepSeek"]
