@@ -331,7 +331,7 @@ function openMapper(up, appendPid, done){
   if (appendPid){
     m.querySelector("#mName").closest(".fld").style.display = "none";
     const vm = m.querySelector('input[name="vmode"]');
-    if (vm) vm.closest("div").parentElement.style.display = "none";
+    if (vm) vm.closest("div").style.display = "none";
   }
   const rows = () => up.previews[sel.delimiter] || [[]];
 
