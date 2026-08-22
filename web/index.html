@@ -23,7 +23,7 @@
   header h1{font-size:17px; font-weight:600}
   header .sub{color:var(--muted); font-size:12.5px}
   header .who{margin-left:auto; color:var(--muted); font-size:13px; display:flex; gap:12px}
-  main{max-width:860px; margin:0 auto; padding:28px 20px}
+  main{max-width:1180px; margin:0 auto; padding:28px 20px}
   button{font:inherit}
   .btn{background:var(--accent); color:#fff; border:0; border-radius:9px;
     padding:9px 18px; cursor:pointer; font-size:14.5px; text-decoration:none; display:inline-block}
@@ -44,20 +44,41 @@
   .tabs button{background:none; border:0; color:var(--muted); font-size:15px;
     cursor:pointer; padding:0 0 6px; border-bottom:2px solid transparent}
   .tabs button.on{color:var(--text); border-color:var(--accent)}
-  .drop{border:2px dashed var(--border); border-radius:14px; padding:26px;
-    text-align:center; color:var(--muted); cursor:pointer; margin-bottom:22px}
+  .drop{border:1.5px dashed #39415a; border-radius:14px; padding:30px;
+    text-align:center; color:var(--muted); cursor:pointer; margin-bottom:22px;
+    background:linear-gradient(180deg, rgba(91,140,255,.04), transparent);
+    transition:border-color .15s}
   .drop:hover,.drop.over{border-color:var(--accent); color:var(--text)}
-  .card{background:var(--panel); border:1px solid var(--border); border-radius:12px;
-    padding:14px 18px; margin-bottom:12px; display:flex; align-items:center; gap:14px;
-    flex-wrap:wrap}
-  .card .nm{font-weight:600; font-size:15px}
-  .card .meta{color:var(--muted); font-size:12.5px}
-  .card .grow{flex:1; min-width:200px}
-  .st{font-size:12px; border-radius:20px; padding:2px 10px; border:1px solid var(--border); flex:none}
-  .st.ready{color:var(--accent2); border-color:var(--accent2)}
-  .st.running{color:var(--warn); border-color:var(--warn)}
+  #plist{display:grid; grid-template-columns:repeat(auto-fill, minmax(380px, 1fr)); gap:14px}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:14px;
+    padding:16px 18px 14px; display:flex; flex-direction:column; gap:9px;
+    transition:border-color .15s, transform .15s}
+  .card:hover{border-color:#39415a; transform:translateY(-1px)}
+  .chead{display:flex; align-items:flex-start; gap:10px}
+  .card .nm{font-weight:600; font-size:15.5px; line-height:1.35; flex:1; min-width:0;
+    cursor:text; overflow-wrap:anywhere}
+  .card .stats{display:flex; gap:6px; flex-wrap:wrap}
+  .card .stat{background:var(--panel2); border:1px solid var(--border); border-radius:8px;
+    padding:3px 9px; font-size:12px; color:var(--muted); white-space:nowrap}
+  .card .stat b{color:var(--text); font-variant-numeric:tabular-nums; font-weight:600}
+  .card .meta{color:var(--muted); font-size:12px; line-height:1.5}
+  .cfoot{display:flex; align-items:center; justify-content:space-between; gap:10px;
+    border-top:1px solid var(--border); padding-top:11px; margin-top:auto}
+  .cleft,.cright{display:flex; gap:7px}
+  .btn.ico{padding:6px 10px; font-size:13.5px; line-height:1; background:transparent;
+    color:var(--muted); border:1px solid var(--border)}
+  .btn.ico:hover{color:var(--text); border-color:var(--accent); filter:none}
+  .btn.ico.danger:hover{color:var(--err); border-color:var(--err)}
+  .st{font-size:11.5px; border-radius:20px; padding:3px 10px 3px 8px; flex:none;
+    border:1px solid var(--border); color:var(--muted);
+    display:inline-flex; align-items:center; gap:6px; white-space:nowrap}
+  .st i{width:7px; height:7px; border-radius:50%; background:currentColor; display:block}
+  .st.ready{color:var(--accent2); border-color:rgba(56,199,147,.4); background:rgba(56,199,147,.07)}
+  .st.running{color:var(--warn); border-color:rgba(229,169,61,.4); background:rgba(229,169,61,.07)}
+  .st.running i{animation:blink 1.1s ease-in-out infinite}
+  @keyframes blink{50%{opacity:.25}}
   .st.queued{color:var(--muted)}
-  .st.failed{color:var(--err); border-color:var(--err)}
+  .st.failed{color:var(--err); border-color:rgba(224,93,93,.4); background:rgba(224,93,93,.07)}
   .bar{height:5px; background:var(--panel2); border-radius:3px; overflow:hidden;
     margin-top:8px; width:100%}
   .bar i{display:block; height:100%; background:var(--warn); transition:width .5s}
@@ -188,23 +209,33 @@ async function refreshList(){
     card.className = "card";
     const pct = pr.progress?.pct ?? 0;
     const stage = pr.progress?.stage ?? "";
+    const idle = pr.status !== "running" && pr.status !== "queued";
     card.innerHTML = `
-      <div class="grow">
+      <div class="chead">
         <div class="nm">${esc(pr.name)}</div>
-        <div class="meta" title="${(pr.variants || []).join(", ")}">${fmt(pr.rows)} фраз${pr.uniq ? ` · ${fmt(pr.uniq)} смыслов` : ""}${pr.clusters ? ` · ${fmt(pr.clusters)} кластеров` : ""}${pr.cost_rub ? ` · ${(+pr.cost_rub).toFixed(2)} ₽` : ""} · ${pr.created}</div>
-        ${pr.history ? `<div class="meta">📈 пополнения: ${esc(pr.history)}</div>` : ""}
-        ${pr.costs?.total_usd ? `<div class="meta">💰 эмбеддинги: OpenAI $${pr.costs.openai_usd} · Gemini $${pr.costs.gemini_usd}${pr.costs.voyage_usd ? ` · Voyage $${pr.costs.voyage_usd}` : ""}${pr.costs.qwen_usd ? ` · Qwen $${pr.costs.qwen_usd}` : ""}${pr.costs.deepseek_usd ? ` · LLM-разметка $${pr.costs.deepseek_usd}${pr.costs.per_cluster_usd ? ` ($${pr.costs.per_cluster_usd}/кластер)` : ""}` : ""} · <b>$${pr.costs.per_query_usd}/запрос</b></div>` : ""}
-        ${pr.status === "running" ? `<div class="meta" style="color:var(--warn)">${esc(stage)}…</div><div class="bar"><i style="width:${pct}%"></i></div>` : ""}
-        ${pr.status === "failed" ? `<div class="meta" style="color:var(--err)">${esc(pr.error || "")}</div>` : ""}
+        <span class="st ${pr.status}"><i></i>${ST_NAME[pr.status] || pr.status}</span>
       </div>
-      <span class="st ${pr.status}">${ST_NAME[pr.status] || pr.status}</span>
-      <div class="acts">
-        ${pr.status === "ready" ? `<a class="btn" href="view.html?p=${pr.id}">Открыть</a>
-          ${!pr.labeled ? `<button class="btn sec" data-a="label" title="Разметить интенты кластеров через DeepSeek (~10 ₽ на 30К фраз)">Интенты (LLM)</button>` : ""}` : ""}
-        ${pr.status === "failed" ? `<button class="btn sec" data-a="run">Повторить</button>` : ""}
-        ${pr.status !== "running" && pr.status !== "queued" ? `<button class="btn sec" data-a="add" title="Докинуть фразы из файла: дубли схлопнутся, новое доэмбеддится инкрементально">➕ Фразы</button>` : ""}
-        ${pr.status !== "running" && pr.status !== "queued" ? `<button class="btn sec" data-a="clone" title="Полная копия проекта (ядро, кэши, деревья, интенты, настройки) — для экспериментов, оригинал не тронется">⧉ Копия</button>` : ""}
-        ${pr.status !== "running" ? `<button class="btn sec" data-a="del" title="Удалить">🗑</button>` : ""}
+      <div class="stats" title="${(pr.variants || []).join(", ")}">
+        <span class="stat"><b>${fmt(pr.rows)}</b> фраз</span>
+        ${pr.uniq ? `<span class="stat"><b>${fmt(pr.uniq)}</b> смыслов</span>` : ""}
+        ${pr.clusters ? `<span class="stat"><b>${fmt(pr.clusters)}</b> кластеров</span>` : ""}
+        ${pr.cost_rub ? `<span class="stat"><b>${(+pr.cost_rub).toFixed(2)}</b> ₽</span>` : ""}
+      </div>
+      <div class="meta">${pr.created}${pr.history ? ` · 📈 ${esc(pr.history)}` : ""}</div>
+      ${pr.costs?.total_usd ? `<div class="meta">💰 OpenAI $${pr.costs.openai_usd} · Gemini $${pr.costs.gemini_usd}${pr.costs.voyage_usd ? ` · Voyage $${pr.costs.voyage_usd}` : ""}${pr.costs.qwen_usd ? ` · Qwen $${pr.costs.qwen_usd}` : ""}${pr.costs.deepseek_usd ? ` · LLM $${pr.costs.deepseek_usd}` : ""} · <b>$${pr.costs.per_query_usd}/запрос</b></div>` : ""}
+      ${pr.status === "running" ? `<div class="meta" style="color:var(--warn)">${esc(stage)}…</div><div class="bar"><i style="width:${pct}%"></i></div>` : ""}
+      ${pr.status === "failed" ? `<div class="meta" style="color:var(--err)" title="${esc(pr.error || "")}">${esc((pr.error || "").slice(0, 120))}</div>` : ""}
+      <div class="cfoot">
+        <div class="cleft">
+          ${pr.status === "ready" ? `<a class="btn" href="view.html?p=${pr.id}">Открыть</a>` : ""}
+          ${pr.status === "failed" ? `<button class="btn" data-a="run">Повторить</button>` : ""}
+          ${pr.status === "ready" && !pr.labeled ? `<button class="btn sec" data-a="label" title="Разметить интенты фраз через DeepSeek (~10 ₽ на 30К фраз)">Интенты</button>` : ""}
+        </div>
+        <div class="cright">
+          ${idle ? `<button class="btn ico" data-a="add" title="Докинуть фразы или обновить частотности">➕</button>` : ""}
+          ${idle ? `<button class="btn ico" data-a="clone" title="Полная копия проекта для экспериментов — оригинал не тронется">⧉</button>` : ""}
+          ${pr.status !== "running" ? `<button class="btn ico danger" data-a="del" title="Удалить проект">🗑</button>` : ""}
+        </div>
       </div>`;
     card.querySelector(".nm").ondblclick = async () => {
       const name = prompt("Новое название проекта:", pr.name);
