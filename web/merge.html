@@ -110,7 +110,10 @@ function parseFile(name, buf){
   try{ text = new TextDecoder("utf-8", {fatal: true}).decode(buf); }
   catch(e){ text = new TextDecoder("windows-1251").decode(buf); }
   if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  let lines = text.split(/\r?\n/).filter(l => l.trim());
+  // экспорт Key Collector «Путь к группе…»: убрать шапку формата и строки-пути групп
+  if (lines.length && lines[0].trim().toLowerCase().startsWith("путь к группе"))
+    lines = lines.slice(1).filter(l => !l.trim().startsWith("/"));
   if (!lines.length) return {name, rows: [], err: "пустой файл"};
   const delim = [";", "\t", ",", "|"].reduce((a, b) => lines[0].split(b).length > lines[0].split(a).length ? b : a);
   const head = parseLine(lines[0], delim).map(strip);

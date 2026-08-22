@@ -40,6 +40,26 @@ def decode_upload(raw: bytes) -> str:
     raise HTTPException(400, "Не удалось определить кодировку файла (жду UTF-8 или Windows-1251)")
 
 
+def normalize_kc(text: str) -> str:
+    """Экспорт Key Collector «Путь к группе и ее название»: убираем строку-шапку
+    формата и строки-пути групп («/Нераспределенные» и т.п.), оставляя обычный
+    CSV с заголовком «Запрос;Wordstat;…»."""
+    lines = text.splitlines()
+    first = next((l for l in lines if l.strip()), "")
+    if not first.strip().lower().startswith("путь к группе"):
+        return text
+    out, skipped_first = [], False
+    for l in lines:
+        s = l.strip()
+        if not skipped_first and s:
+            skipped_first = True  # сама строка «Путь к группе…»
+            continue
+        if s.startswith("/"):
+            continue  # маркер группы, не данные
+        out.append(l)
+    return "\n".join(out)
+
+
 def guess_mapping(text: str) -> dict:
     """Автоопределение разделителя, заголовка и колонок + превью для модалки-маппера."""
     lines = [l for l in text.splitlines() if l.strip()][:16]
@@ -119,7 +139,7 @@ async def upload(request: Request, file: UploadFile = File(...),
     raw = await file.read()
     if len(raw) > MAX_UPLOAD_MB * 1024 * 1024:
         raise HTTPException(400, f"Файл больше {MAX_UPLOAD_MB} МБ")
-    text = decode_upload(raw)
+    text = normalize_kc(decode_upload(raw))
     guess = guess_mapping(text)
     with db() as c:
         row = c.execute("SELECT mapping FROM mapping_templates WHERE sig=?",
