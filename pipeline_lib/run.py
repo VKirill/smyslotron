@@ -7,7 +7,7 @@ import time
 import numpy as np
 
 from . import ctx
-from .cluster import apply_slice, build_all
+from .cluster import apply_slice, base_labels, build_all, save_thresholds, trees_ready
 from .config import DERIVED, METHODS, PRICE, TITLES, USD_RUB
 from .ctx import set_status
 from .dedup import pick_reps
@@ -81,7 +81,12 @@ async def main(variants: list[str], target_geo: str, label_only: bool) -> None:
 
         # кластерные колонки CSV — по фиксированному срезу базового варианта
         set_status("Экспорт CSV", 96)
-        fine, coarse = build_all(emb_base[rep_idx], base_key, data_dir, 96, 98)
+        quick = base_labels(data_dir, base_key, len(reps))
+        if quick is not None:
+            fine, coarse = quick  # деревья готовы — режем из .bin за секунды
+        else:
+            fine, coarse, tf, tc = build_all(emb_base[rep_idx], base_key, data_dir, 96, 98)
+            save_thresholds(data_dir, base_key, tf, tc)
         fine = apply_slice(fine, r_geo, target_geo)
         names_f, names_c = name_of(fine, r_qs, r_fp), name_of(coarse, r_qs, r_fp)
         if -1 in names_f:
@@ -150,13 +155,22 @@ async def main(variants: list[str], target_geo: str, label_only: bool) -> None:
     span = 55 / max(1, len(variants))
     for vi, vkey in enumerate(variants):
         try:
-            if (vkey != base_key
-                    and all((data_dir / f"{vkey}_{m}.bin").exists() for m in METHODS)):
-                built.append(vkey)  # деревья уже есть с прошлого запуска (дедуп детерминирован)
+            if trees_ready(data_dir, vkey):
+                if vkey == base_key:
+                    quick = base_labels(data_dir, vkey, len(reps))
+                    if quick is None:
+                        raise RuntimeError("rebuild")  # порогов/размера нет — пересобрать
+                    fine, coarse = quick
+                built.append(vkey)  # деревья уже есть с прошлого запуска
                 continue
+            raise RuntimeError("rebuild")
+        except RuntimeError:
+            pass
+        try:
             emb = await store.get(vkey)
-            f_, c_ = build_all(emb[rep_idx], vkey, data_dir,
-                               int(38 + vi * span), int(38 + (vi + 1) * span))
+            f_, c_, tf, tc = build_all(emb[rep_idx], vkey, data_dir,
+                                       int(38 + vi * span), int(38 + (vi + 1) * span))
+            save_thresholds(data_dir, vkey, tf, tc)
             built.append(vkey)
             if vkey == base_key:
                 fine, coarse = f_, c_
@@ -165,11 +179,18 @@ async def main(variants: list[str], target_geo: str, label_only: bool) -> None:
             set_status(f"Вариант {TITLES.get(vkey, vkey)} пропущен: {type(e).__name__}",
                        int(38 + (vi + 1) * span), skipped=skipped)
     if fine is None:  # база не построилась в цикле — считаем отдельно
-        fine, coarse = build_all(emb_base[rep_idx], base_key, data_dir, 93, 95)
+        fine, coarse, tf, tc = build_all(emb_base[rep_idx], base_key, data_dir, 93, 95)
+        save_thresholds(data_dir, base_key, tf, tc)
     fine = apply_slice(fine, r_geo, target_geo)
 
+    thr_keep = {}
+    try:
+        thr_keep = json.loads((data_dir / "meta.json").read_text()).get("thresholds", {})
+    except (OSError, json.JSONDecodeError):
+        pass
     (data_dir / "meta.json").write_text(json.dumps(
         {"n": len(reps), "generated": time.strftime("%F %H:%M"),
+         "thresholds": thr_keep,
          "providers": {v: {"methods": list(METHODS), "title": TITLES[v]} for v in built}},
         ensure_ascii=False))
 

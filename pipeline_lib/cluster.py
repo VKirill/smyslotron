@@ -84,6 +84,29 @@ def split_by_geo(labels, geo, target=""):
     return new_lab
 
 
+def labels_from_bin(fbin, n_reps: int, t: float):
+    """Метки кластеров из готового дерева .bin: применить слияния с дистанцией <= t.
+    Эквивалент fcluster(criterion='distance') без пересборки linkage."""
+    raw = fbin.read_bytes()
+    m = len(raw) // 12
+    parent = list(range(n_reps + m))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for i in range(m):
+        a, b, d = struct.unpack_from("<iif", raw, i * 12)
+        if d > t:
+            break
+        node = n_reps + i
+        parent[find(a)] = node
+        parent[find(b)] = node
+    return np.array([find(i) for i in range(n_reps)])
+
+
 def build_all(emb, provider, data_dir, pct_from, pct_to):
     x = _norm(emb)
     dist = 1.0 - x @ x.T
@@ -109,4 +132,41 @@ def build_all(emb, provider, data_dir, pct_from, pct_to):
     del cond
     fine = fcluster(z_avg, t=t_fine, criterion="distance")
     coarse = fcluster(z_avg, t=t_coarse, criterion="distance")
-    return fine, coarse
+    return fine, coarse, float(t_fine), float(t_coarse)
+
+
+def trees_ready(data_dir, vkey) -> bool:
+    from .config import METHODS as _M
+    return all((data_dir / f"{vkey}_{m}.bin").exists() for m in _M)
+
+
+def load_thresholds(data_dir, vkey):
+    """Пороги авторазреза базового варианта из meta.json (сохраняются при сборке)."""
+    try:
+        meta = json.loads((data_dir / "meta.json").read_text())
+        tf, tc = meta["thresholds"][vkey]
+        return float(tf), float(tc)
+    except (OSError, json.JSONDecodeError, KeyError, TypeError, ValueError):
+        return None
+
+
+def save_thresholds(data_dir, vkey, tf, tc) -> None:
+    try:
+        meta = json.loads((data_dir / "meta.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        meta = {}
+    meta.setdefault("thresholds", {})[vkey] = [tf, tc]
+    (data_dir / "meta.json").write_text(json.dumps(meta, ensure_ascii=False))
+
+
+def base_labels(data_dir, vkey, n_reps):
+    """Быстрые метки базового варианта из готового дерева, если пороги известны
+    и дерево совпадает по размеру; иначе None (нужна пересборка)."""
+    thr = load_thresholds(data_dir, vkey)
+    if thr is None:
+        return None
+    fbin = data_dir / f"{vkey}_avg.bin"
+    if not fbin.exists() or len(fbin.read_bytes()) // 12 != n_reps - 1:
+        return None
+    return (labels_from_bin(fbin, n_reps, thr[0]),
+            labels_from_bin(fbin, n_reps, thr[1]))
