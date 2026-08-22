@@ -1558,13 +1558,13 @@ async function boot(){
     e.preventDefault();
     if (!PID){ alert("Демо-режим: сохранение среза недоступно"); return; }
     const v = state.cols[0];
-    if (!confirm(`Зафиксировать срез: ${titleOf(v)} · ${MODE_NAME[state.mode]} · ${(state.slider / 100).toFixed(1)}% · мин.${state.minSize}?\n\nСерверный CSV и кластерные колонки интентов будут пересобраны по этому срезу.`)) return;
+    if (!confirm(`Зафиксировать срез: ${titleOf(v)} · ${MODE_NAME[state.mode]} · ${(state.slider / 100).toFixed(1)}% · мин.${state.minSize}?`)) return;
     try{
       await fetch(`api/projects/${PID}/slice`, {method: "POST", credentials: "same-origin",
         headers: {"Content-Type": "application/json"},
         body: JSON.stringify({variant: v, mode: state.mode,
                               slider: state.slider, min_size: state.minSize})});
-      alert("Срез сохранён, пересборка запущена (обычно меньше минуты — эмбеддинги и деревья уже в кэше). Когда проект снова станет «готов», серверный CSV и интенты кластеров будут по этому срезу.");
+      alert("Срез зафиксирован. Экспорт — кнопка «⬇ Excel»: она всегда отдаёт актуальное состояние (срез, корзину, минус-слова, правила).");
     }catch(err){ alert("Не удалось сохранить: " + err.message); }
   };
 

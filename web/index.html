@@ -200,7 +200,6 @@ async function refreshList(){
       <span class="st ${pr.status}">${ST_NAME[pr.status] || pr.status}</span>
       <div class="acts">
         ${pr.status === "ready" ? `<a class="btn" href="view.html?p=${pr.id}">Открыть</a>
-          <a class="btn sec" href="${API}/projects/${pr.id}/data/result.csv">CSV</a>
           ${!pr.labeled ? `<button class="btn sec" data-a="label" title="Разметить интенты кластеров через DeepSeek (~10 ₽ на 30К фраз)">Интенты (LLM)</button>` : ""}` : ""}
         ${pr.status === "failed" ? `<button class="btn sec" data-a="run">Повторить</button>` : ""}
         ${pr.status !== "running" && pr.status !== "queued" ? `<button class="btn sec" data-a="add" title="Докинуть фразы из файла: дубли схлопнутся, новое доэмбеддится инкрементально">➕ Фразы</button>` : ""}

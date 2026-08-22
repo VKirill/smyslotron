@@ -482,12 +482,10 @@ async def label_project(pid: str, user: sqlite3.Row = Depends(current_user)):
 
 @app.post(P + "/projects/{pid}/slice")
 async def save_slice(pid: str, request: Request, user: sqlite3.Row = Depends(current_user)):
-    """Зафиксировать текущий срез просмотрщика как каноническую кластеризацию проекта:
-    serverный result.csv и кластерные колонки интентов строятся по нему.
-    Ставит дешёвую пересборку в очередь (эмбеддинги и деревья в кэше)."""
+    """Зафиксировать текущий срез просмотрщика: мгновенная запись slice.json,
+    без пересборки. Пайплайн подхватит срез при следующем естественном прогоне
+    (интенты/пополнение); пользовательский экспорт — клиентский Excel."""
     row = own_project(pid, user)
-    if row["status"] == "running":
-        raise HTTPException(400, "Дождись окончания текущей обработки")
     body = await request.json()
     variant = str(body.get("variant") or "")
     mode = str(body.get("mode") or "")
@@ -497,9 +495,6 @@ async def save_slice(pid: str, request: Request, user: sqlite3.Row = Depends(cur
           "slider": max(0, min(10000, int(body.get("slider", 0)))),
           "min_size": max(1, min(1000, int(body.get("min_size", 1))))}
     (project_dir(row) / "slice.json").write_text(json.dumps(sl), encoding="utf-8")
-    with db() as c:
-        c.execute("UPDATE projects SET status='queued', task='cluster', error='' WHERE id=?",
-                  (pid,))
     return {"ok": True, **sl}
 
 
