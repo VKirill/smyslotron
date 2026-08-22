@@ -162,6 +162,11 @@
   .ctxitem{display:flex; gap:10px; align-items:center; padding:8px 12px; border-radius:7px;
     cursor:pointer; font-size:13.5px}
   .ctxitem:hover{background:var(--panel); color:var(--accent)}
+  .prespop{padding:14px 18px !important; max-width:420px; min-width:260px; cursor:default}
+  .prespop .pscore{font-size:24px; font-weight:800; color:var(--accent2, #38c793); margin-bottom:8px}
+  .prespop .pfield{font-size:14.5px; line-height:1.5; margin-top:8px; white-space:normal}
+  .prespop .pfield b{display:block; font-size:11px; text-transform:uppercase;
+    letter-spacing:.07em; color:var(--muted); margin-bottom:2px}
   .q mark{background:var(--hl); color:var(--accent); border-radius:3px; padding:0 1px}
   .q .se{flex:none; display:inline-flex; gap:4px; opacity:0; transition:opacity .12s}
   .q:hover .se{opacity:1}
@@ -852,9 +857,10 @@ function folderEl(c, col, overlap){
       ${c.dom ? `<span class="badge int ${INT_CLS[c.dom] || ""}${c.mixed ? " mx" : ""}" title="Интент кластера: ${esc(c.dom)}${c.mixed ? " (смешанный — есть второй интент ≥25%)" : ""}">${INT_SHORT[c.dom] || "?"}${c.mixed ? "⚠" : ""}</span>` : ""}
       ${c.geo ? `<span class="badge geo" title="Гео-кластер">📍 ${esc(c.geo)}</span>` : ""}
       ${c.qn ? `<span class="badge qb" title="Вопросных фраз">❓ ${Math.round(c.qn / c.idxs.length * 100)}%</span>` : ""}
-      ${PRES[Q[c.top]] !== undefined ? `<span class="badge pres" title="${esc(JSON.stringify(PRES[Q[c.top]], null, 1))}">⚙ ${scoreOf(PRES[Q[c.top]]) ?? "✓"}</span>` : ""}
+      ${PRES[Q[c.top]] !== undefined ? `<span class="badge pres" title="Клик — почему такая оценка">⚙ ${scoreOf(PRES[Q[c.top]]) ?? "✓"}</span>` : ""}
       ${isAB() && !state.anOn && !col.tpl ? `<button class="cmp" title="Найти эти фразы в соседней колонке">⇄</button>` : ""}
       <button class="copy" title="Скопировать уникальные фразы кластера (без дублей)">⧉</button>
+      <button class="copy peval" title="Оценить кластер текущим промтом (таб «Промты») через DeepSeek">⚙</button>
       ${overlap ? `<span class="badge ov">${overlap} общ.</span>` : ""}
       <span class="badge" title="Уникальных смыслов${c.dups ? ` + склеенных дублей` : ""}">${fmt(c.idxs.length)}${c.dups ? `+${fmt(c.dups)}` : ""} фраз</span>
       <span class="badge">Σ ${fmt(c.sum)}</span></div>`;
@@ -869,9 +875,55 @@ function folderEl(c, col, overlap){
     state.sel = {col: col.prov, label: c.label, idxs: c.idxs};
     render();
   });
+  const pe = head.querySelector(".peval");
+  if (pe) pe.addEventListener("click", e => { e.stopPropagation(); evalCluster(c, pe); });
+  const pb = head.querySelector(".badge.pres");
+  if (pb) pb.addEventListener("click", e => { e.stopPropagation(); showPresPop(e, PRES[Q[c.top]]); });
   head.addEventListener("click", () => toggleFolder(div, c, col));
   head.addEventListener("contextmenu", e => { e.preventDefault(); showCtx(e, c); });
   return div;
+}
+
+async function evalCluster(c, btn){
+  const prompt = $("#prText") ? $("#prText").value.trim() : "";
+  if (!prompt){ alert("Выбери или напиши промт на табе «Промты»"); return; }
+  btn.textContent = "⏳"; btn.disabled = true;
+  try{
+    const text = [...c.idxs].sort((x, y) => F[y] - F[x]).slice(0, 10).map(i => Q[i]).join("; ");
+    const r = await fetch("api/prompt_eval", {method: "POST", credentials: "same-origin",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({prompt, schema: $("#prSchema").value.trim(),
+                            items: [{id: 0, text}]})});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.status);
+    const it = (d.items || [])[0];
+    if (it){
+      const {id, ...rest} = it;
+      PRES[Q[c.top]] = rest;
+      dbSet("sem_pres:" + (PID || "demo"), PRES);
+    }
+    render();
+  }catch(err){
+    btn.textContent = "✗"; btn.disabled = false;
+    setTimeout(() => { btn.textContent = "⚙"; }, 1600);
+  }
+}
+
+function showPresPop(e, r){
+  hideCtx();
+  if (!r) return;
+  const m = document.createElement("div");
+  m.id = "ctxmenu";           // общий id — закрытие кликом/Esc/скроллом уже работает
+  m.className = "prespop";
+  m.onclick = ev => ev.stopPropagation();
+  const sc = scoreOf(r);
+  m.innerHTML = `<div class="pscore">⚙ ${sc !== null ? sc : "—"}</div>` +
+    Object.entries(r).filter(([k, v]) => k !== "score" && v !== "" && v !== null)
+      .map(([k, v]) => `<div class="pfield"><b>${esc(k)}</b>${esc(typeof v === "object" ? JSON.stringify(v) : String(v))}</div>`).join("");
+  document.body.appendChild(m);
+  const w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.min(e.clientX, innerWidth - w - 8) + "px";
+  m.style.top = Math.min(e.clientY, innerHeight - h - 8) + "px";
 }
 
 function toggleFolder(div, c, col){
