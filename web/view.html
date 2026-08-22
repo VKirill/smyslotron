@@ -657,7 +657,8 @@ function render(){
       // счёт папок «один к одному»: мелкие группы из «Без группы» — тоже папки
       const nSmallF = q ? small.filter(cc => cc.idxs.some(i => matchQ(i, q))).length : small.length;
       const nFolders = clusters.length + nSmallF;
-      const cntHtml = `<span title="${fmt(clusters.length)} групп + ${fmt(nSmallF)} в «Без группы»">${fmt(nFolders)} папок</span>`;
+      const cntHtml = `<span title="${fmt(clusters.length)} групп + ${fmt(nSmallF)} в «Без группы»">${fmt(nFolders)} папок</span>
+        <button class="copy colcopy" title="Скопировать уникальные фразы всех показанных папок колонки (без дублей и «Без группы»)">⧉</button>`;
 
       const head = document.createElement("div");
       head.className = "colhead";
@@ -695,6 +696,18 @@ function render(){
           <span>${isOther && ovMap ? `${fmt(clusters.length)} папок с общими фразами` : cntHtml}
           ${isAB() && state.sel && col.prov === state.sel.col ? ` · <button class="link" id="resetSel">сбросить выбор</button>` : ""}</span>`;
       }
+      const ccb = head.querySelector(".colcopy");
+      if (ccb) ccb.onclick = async e => {
+        e.stopPropagation();
+        const lines = [];
+        for (const c of clusters)
+          for (const i of [...c.idxs].sort((x, y) => F[y] - F[x])) lines.push(Q[i]);
+        try{
+          await navigator.clipboard.writeText(lines.join("\n"));
+          ccb.textContent = "✓"; ccb.classList.add("ok");
+        }catch(err){ ccb.textContent = "✗"; }
+        setTimeout(() => { ccb.textContent = "⧉"; ccb.classList.remove("ok"); }, 1200);
+      };
       el.appendChild(head);
 
       const list = document.createElement("div");
