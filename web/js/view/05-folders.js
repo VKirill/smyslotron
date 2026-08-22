@@ -23,7 +23,7 @@ function folderEl(c, col, overlap){
       <span class="slot scmp">${isAB() && !state.anOn && !col.tpl ? `<button class="cmp" title="Найти эти фразы в соседней колонке">⇄</button>` : ""}</span>
       <button class="copy" title="Скопировать уникальные фразы кластера (без дублей)">⧉</button>
       <button class="copy peval" title="Оценить кластер текущим промтом (таб «Промты») через DeepSeek">⚙</button>
-      <span class="slot scnt"><span class="badge" title="Уникальных смыслов${c.dups ? ` + склеенных дублей` : ""}">${fmt(c.idxs.length)}${c.dups ? `+${fmt(c.dups)}` : ""} фраз</span></span>
+      <span class="slot scnt"><span class="badge" title="Уникальных фраз: ${fmt(c.idxs.length)}${c.dups ? `; склеенных дублей: ${fmt(c.dups)}` : ""}">${fmt(c.idxs.length)} фраз</span></span>
       <span class="slot ssum"><span class="badge">Σ ${fmt(c.sum)}</span></span></div>`;
   const head = div.firstElementChild;
   head.querySelector(".copy").addEventListener("click", e => {
