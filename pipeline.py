@@ -60,6 +60,23 @@ def cli_variants() -> list[str]:
 
 PRICE = {"openai": 0.13, "gemini": 0.15, "voyage": 0.18, "qwen": 0.07,
          "ds_in": 0.28, "ds_out": 0.42}  # $/1M токенов
+
+
+def ds_params() -> dict:
+    """Настройки DeepSeek из окружения (.env): модель, ризонинг, уровень мышления, температура.
+
+    DEEPSEEK_REASONING=1 включает thinking-режим (chain-of-thought до ответа) —
+    точнее на спорных интентах, но заметно дороже и медленнее: reasoning-токены
+    тарифицируются как выходные. DEEPSEEK_EFFORT (high|max) — глубина мышления.
+    """
+    p = {"model": os.environ.get("DEEPSEEK_MODEL", "deepseek-v4-flash"),
+         "temperature": float(os.environ.get("DEEPSEEK_TEMP", "0.1"))}
+    if os.environ.get("DEEPSEEK_REASONING", "0") == "1":
+        p["thinking"] = {"type": "enabled"}
+        p["reasoning_effort"] = os.environ.get("DEEPSEEK_EFFORT", "high")
+    else:
+        p["thinking"] = {"type": "disabled"}
+    return p
 USD_RUB = 80.0
 P_FINE, P_COARSE = 15, 75
 DEDUP_SIM_SURE, DEDUP_SIM_FLOOR = 0.97, 0.85
@@ -427,11 +444,10 @@ async def deepseek_label_phrases(phrases, key):
             lines = "\n".join(f"{pid}: {txt}" for pid, txt in batch)
             r = await retry_post(client, "https://api.deepseek.com/chat/completions", sem,
                                  headers={"Authorization": f"Bearer {key}"}, json={
-                                     "model": "deepseek-v4-flash",
+                                     **ds_params(),
                                      "messages": [{"role": "system", "content": PHRASE_PROMPT},
                                                   {"role": "user", "content": lines}],
-                                     "response_format": {"type": "json_object"},
-                                     "temperature": 0.1})
+                                     "response_format": {"type": "json_object"}})
             d = r.json()
             tin += d["usage"]["prompt_tokens"]
             tout += d["usage"]["completion_tokens"]
@@ -481,11 +497,10 @@ async def deepseek_label(groups, key):
                 lines.append(f"Кластер id={cid}: " + "; ".join(q for q, _ in qs))
             r = await retry_post(client, "https://api.deepseek.com/chat/completions", sem,
                                  headers={"Authorization": f"Bearer {key}"}, json={
-                                     "model": "deepseek-v4-flash",
+                                     **ds_params(),
                                      "messages": [{"role": "system", "content": INTENT_PROMPT},
                                                   {"role": "user", "content": "\n".join(lines)}],
-                                     "response_format": {"type": "json_object"},
-                                     "temperature": 0.1})
+                                     "response_format": {"type": "json_object"}})
             d = r.json()
             tin += d["usage"]["prompt_tokens"]
             tout += d["usage"]["completion_tokens"]
