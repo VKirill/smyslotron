@@ -281,6 +281,9 @@ async def delete_project(pid: str, user: sqlite3.Row = Depends(current_user)):
     shutil.rmtree(project_dir(row), ignore_errors=True)
     with db() as c:
         c.execute("DELETE FROM projects WHERE id=?", (pid,))
+        # настройки просмотрщика этого проекта (prefs/корзина/правила/оценки)
+        c.execute("DELETE FROM user_prefs WHERE user_id=? AND key LIKE ?",
+                  (user["id"], f"%:{pid}"))
     return {"ok": True}
 
 
