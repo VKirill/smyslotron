@@ -118,9 +118,10 @@ function renderRules(){
 
 
 /* ---------- перенос фраз в другой проект ---------- */
-async function openMoveDialog(phrases, nFolders){
+async function openMoveDialog(phrases, nFolders, singles){
   hideCtx();
-  if (!phrases.length){ alert("Нечего переносить"); return; }
+  singles = singles || [];
+  if (!phrases.length && !singles.length){ alert("Нечего переносить"); return; }
   let projects = [];
   try{
     const r = await fetch("api/projects", {credentials: "same-origin"});
@@ -132,11 +133,12 @@ async function openMoveDialog(phrases, nFolders){
   m.style.minWidth = "360px";
   m.onclick = ev => ev.stopPropagation();
   const opts = projects.map(p => `<option value="${esc(p.id)}">${esc(p.name)} (${fmt(p.rows)} фраз)</option>`).join("");
-  m.innerHTML = `<div class="pscore" style="font-size:16px">📤 Перенести ${fmt(phrases.length)} фраз из ${fmt(nFolders)} папок</div>
+  m.innerHTML = `<div class="pscore" style="font-size:16px">📤 Перенести ${fmt(phrases.length)} фраз из ${fmt(nFolders)} папок${singles.length ? ` + одиночки` : ""}</div>
     <div class="pfield"><b>куда</b>
       <select id="mvTarget" style="width:100%; margin-top:4px"><option value="">— новый проект —</option>${opts}</select></div>
     <div class="pfield" id="mvNameRow"><b>название нового проекта</b>
       <input id="mvName" style="width:100%; margin-top:4px; padding:6px 8px; background:var(--panel2); border:1px solid var(--border); border-radius:7px; color:var(--text); font:inherit" value="${esc(($("#ptitle") && $("#ptitle").textContent) || "Проект")} — ${esc(state.search.trim() || "выборка")}"></div>
+    ${singles.length ? `<div class="pfield"><label style="display:flex; align-items:center; gap:7px; cursor:pointer"><input type="checkbox" id="mvSingles" checked> включить одиночки из «Без группы» (${fmt(singles.length)} фраз)</label></div>` : ""}
     <div class="pfield" style="color:var(--muted); font-size:12.5px">Фразы уйдут с частотностями и дублями; здесь они попадут в корзину (вернуть можно в любой момент). Целевой проект пересчитается.</div>
     <div style="display:flex; gap:8px; margin-top:10px; justify-content:flex-end">
       <button class="ctxitem" id="mvCancel" style="border:1px solid var(--border)">Отмена</button>
@@ -150,6 +152,9 @@ async function openMoveDialog(phrases, nFolders){
   m.querySelector("#mvGo").onclick = async () => {
     const target = sel.value || null;
     const name = m.querySelector("#mvName").value.trim();
+    const cbS = m.querySelector("#mvSingles");
+    if (cbS && cbS.checked) phrases = phrases.concat(singles);
+    if (!phrases.length){ alert("Нечего переносить"); return; }
     m.querySelector("#mvGo").textContent = "⏳";
     try{
       const r = await fetch(`api/projects/${PID}/move`, {method: "POST", credentials: "same-origin",

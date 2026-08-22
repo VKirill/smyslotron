@@ -134,11 +134,16 @@ function render(){
       const cmv = head.querySelector(".colmove");
       if (cmv) cmv.onclick = e => {
         e.stopPropagation();
-        // все уникальные фразы показанных папок + их дубли (перенос смысла целиком)
-        const phrases = [];
+        // фразы показанных папок + их дубли (перенос смысла целиком); одиночки — отдельно
+        const phrases = [], singles = [];
         for (const c of clusters)
           for (const i of c.idxs){ phrases.push(Q[i]); if (D && D[i]) phrases.push(...D[i]); }
-        openMoveDialog(phrases, clusters.length);
+        for (const cc of small)
+          for (const i of cc.idxs){
+            if (q && !matchQ(i, q)) continue;   // при поиске — только найденные одиночки
+            singles.push(Q[i]); if (D && D[i]) singles.push(...D[i]);
+          }
+        openMoveDialog(phrases, clusters.length, singles);
       };
       const ccb = head.querySelector(".colcopy");
       if (ccb) ccb.onclick = async e => {
