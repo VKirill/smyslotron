@@ -55,6 +55,14 @@
     width:6px; height:6px; border-radius:50%; background:var(--green)}
   .tabpane{display:none}
   .tabpane.on{display:block}
+  /* перетаскивание блоков сайдбара */
+  .tabpane > [data-g] > label, .tabpane > [data-g] > summary{cursor:grab; user-select:none}
+  .tabpane > [data-g] > label::before, .tabpane > [data-g] > summary::before{
+    content:"⠿"; color:var(--border); margin-right:7px; font-size:11px}
+  .tabpane > [data-g]:hover > label::before,
+  .tabpane > [data-g]:hover > summary::before{color:var(--muted)}
+  .tabpane > .dragging{opacity:.45}
+  .tabpane > .stats[data-g]{cursor:grab}
   input[type=range]{width:100%; accent-color:var(--accent)}
   .row{display:flex; justify-content:space-between; font-size:13.5px; color:var(--muted)}
   .row b{color:var(--text)}
@@ -240,12 +248,12 @@
       <button data-v="prompts">Промты</button>
     </div>
     <div class="tabpane on" id="pane-main">
-    <div class="grp">
+    <div class="grp" data-g="emb">
       <label>Эмбеддинги</label>
       <div class="seg" id="segProvider"></div>
       <div class="hint" id="providerHint"></div>
     </div>
-    <div class="grp">
+    <div class="grp" data-g="mode">
       <label>Режим связи</label>
       <div class="seg" id="segMode">
         <button data-v="hard">Hard</button>
@@ -254,20 +262,20 @@
       </div>
       <div class="hint" id="modeHint"></div>
     </div>
-    <div class="grp" id="sliderGrp" title="Колёсико мыши: шаг 0.02% (с Shift — 1%)">
+    <div class="grp" data-g="slider" id="sliderGrp" title="Колёсико мыши: шаг 0.02% (с Shift — 1%)">
       <label>Сила объединения</label>
       <input type="range" id="slider" min="0" max="10000" value="8200">
       <div class="row"><span>порог сходства: <b id="thr">—</b></span><span>папок: <b id="ncl">—</b></span></div>
     </div>
-    <div class="stats" id="stats"></div>
-    <div class="grp">
+    <div class="stats" data-g="stats" id="stats"></div>
+    <div class="grp" data-g="minsize">
       <label>Мин. фраз в папке</label>
       <input type="number" id="minSize" min="1" value="2">
       <div class="hint">папки меньше — в «Без группы» в конце списка</div>
     </div>
     </div><!-- /pane-main -->
     <div class="tabpane" id="pane-filters">
-    <div class="grp">
+    <div class="grp" data-g="search">
       <label>Поиск по фразам</label>
       <input type="search" id="search" placeholder='[под ключ] · "купить слона" · !москве · !!аренда'>
       <label style="display:flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; margin-top:6px">
@@ -280,7 +288,7 @@
       слэша, по умолчанию регистронезависимо). Без «!» слово ищется в любой форме
       (по леммам)</div>
     </div>
-    <div class="grp">
+    <div class="grp" data-g="analysis">
       <label>Режим анализа</label>
       <label style="display:flex; align-items:center; gap:7px; font-size:13.5px; cursor:pointer">
         <input type="checkbox" id="anOn"> столбцы-поиски</label>
@@ -289,7 +297,7 @@
       (первый включённый вариант): удобно следить, в какие группы попадают нужные запросы.
       Обычный поиск слева при этом не действует</div>
     </div>
-    <div class="grp">
+    <div class="grp" data-g="freq">
       <label>Фильтр по частотности</label>
       <select id="fMode">
         <option value="off">нет</option>
@@ -307,14 +315,14 @@
       «в Без группы» — вынимаются из кластеров и лежат внизу отдельно
       (частотность — суммарная по фразе вместе с её дублями)</div>
     </div>
-    <div class="grp">
+    <div class="grp" data-g="geo">
       <label>Целевое гео</label>
       <input type="search" id="targetGeo" list="geoList" placeholder="москва, мо, подмосковье">
       <datalist id="geoList"></datalist>
       <div class="hint">синонимы региона через запятую: их слова вычитаются из гео фразы —
       «дома под ключ в москве и мо» склеится с «дома под ключ», а Казань останется отдельно</div>
     </div>
-    <div class="grp">
+    <div class="grp" data-g="minus">
       <label>Минус-слова</label>
       <textarea id="minusW" rows="3" placeholder="кухня, спальня&#10;кухня стиль" style="width:100%; padding:7px 9px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; font-family:inherit; outline:none; resize:vertical"></textarea>
       <div class="hint">через запятую или с новой строки; слово ловит любую форму
@@ -322,14 +330,14 @@
       «кухня стиль» — минусует фразу, где встречаются <b>все</b> эти слова в любом
       порядке. Исключено фраз: <b id="minusCnt">0</b></div>
     </div>
-    <div class="grp">
+    <div class="grp" data-g="trash">
       <label>Корзина <span id="trashCnt" style="color:var(--muted)"></span>
         <button class="link" id="trashClear" style="float:right">вернуть всё</button></label>
       <div class="hint">фразы из корзины не участвуют в кластеризации; 🗑 у фразы —
       убрать, клик по фразе ниже — вернуть</div>
       <div id="trashList" style="max-height:180px; overflow-y:auto; font-size:12.5px; margin-top:6px"></div>
     </div>
-    <div class="grp">
+    <div class="grp" data-g="rules">
       <label>Правила связок</label>
       <div class="hint">создаются из выделения (галочки у фраз → панель внизу):
       <b>🔗 вместе</b> — папки участников склеиваются при любой силе;
@@ -338,7 +346,7 @@
     </div>
     </div><!-- /pane-filters -->
     <div class="tabpane" id="pane-tpls">
-    <details class="help">
+    <details class="help" data-g="help">
       <summary>Как это работает</summary>
       <p>Каждая фраза превращена в <b>эмбеддинг</b> — числовой «слепок смысла» от языковой
       модели. Чем ближе смысл двух фраз, тем выше их сходство (от 0 до 1). По этим
@@ -403,13 +411,13 @@
       снова одна папка, а Казань остаётся отдельно. Настройка сохраняется в проект и
       применяется к серверному CSV при следующем пересчёте.</p>
     </details>
-    <div class="grp" style="margin-top:16px">
+    <div class="grp" data-g="tplbox" style="margin-top:16px">
       <label>Шаблоны фильтров <button id="tplAdd" class="tadd" title="Сохранить текущие настройки как шаблон">+</button></label>
       <div id="tplList"></div>
     </div>
     </div><!-- /pane-tpls -->
     <div class="tabpane" id="pane-prompts">
-    <div class="grp">
+    <div class="grp" data-g="prlib">
       <label>Сохранённые промты</label>
       <select id="prSel"><option value="">— новый промт —</option></select>
       <div style="display:flex; gap:7px; margin-top:6px">
@@ -417,17 +425,17 @@
         <button class="link" id="prDel" style="color:var(--err, #e05d5d)">удалить</button>
       </div>
     </div>
-    <div class="grp">
+    <div class="grp" data-g="prtext">
       <label>Промт (что оценивать)</label>
       <textarea id="prText" rows="7" style="width:100%; padding:7px 9px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:13px; font-family:inherit; outline:none; resize:vertical"></textarea>
     </div>
-    <div class="grp">
+    <div class="grp" data-g="prschema">
       <label>Формат ответа (JSON)</label>
       <textarea id="prSchema" rows="4" style="width:100%; padding:7px 9px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:13px; font-family:inherit; outline:none; resize:vertical"></textarea>
       <div class="hint">поле <b>score</b> (число) покажется бейджем ⚙ на папке;
       весь JSON — в тултипе бейджа</div>
     </div>
-    <div class="grp">
+    <div class="grp" data-g="prrun">
       <button class="csvbtn" id="prRun" style="display:block; width:100%; text-align:center; background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; padding:8px">▶ Прогнать по папкам среза</button>
       <label style="display:flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; margin-top:8px">
         <input type="checkbox" id="presSort"> сортировать папки по баллам</label>
@@ -1862,6 +1870,17 @@ async function boot(){
     $("#prSel").value = "0";
   }
   renderPresFlt();
+  // применить сохранённый пользователем порядок блоков сайдбара
+  const lay = await dbGet("sem_layout");
+  if (lay) document.querySelectorAll(".tabpane").forEach(pane => {
+    const order = lay[pane.id];
+    if (!Array.isArray(order)) return;
+    const items = [...pane.children].filter(x => x.dataset.g);
+    const map = new Map(items.map(x => [x.dataset.g, x]));
+    const seq = order.filter(g => map.has(g)).map(g => map.get(g))
+      .concat(items.filter(x => !order.includes(x.dataset.g)));
+    for (const el of seq) pane.appendChild(el);
+  });
   if (prefs.presSort){ state.presSort = true; $("#presSort").checked = true; }
   if (prefs.presFlt && prefs.presFlt.field) state.presFlt = prefs.presFlt;
   if (prefs.anOn){
@@ -1894,6 +1913,35 @@ async function boot(){
   document.querySelectorAll("#sideTabs button").forEach(b => b.onclick = () => {
     document.querySelectorAll("#sideTabs button").forEach(x => x.classList.toggle("on", x === b));
     document.querySelectorAll(".tabpane").forEach(p => p.classList.toggle("on", p.id === "pane-" + b.dataset.v));
+  });
+
+  // персональный порядок блоков: перетаскивание за заголовок, сохранение в БД
+  function saveLayout(){
+    const lay = {};
+    document.querySelectorAll(".tabpane").forEach(p => {
+      lay[p.id] = [...p.children].filter(x => x.dataset.g).map(x => x.dataset.g);
+    });
+    dbSet("sem_layout", lay);
+  }
+  let dragEl = null;
+  document.querySelectorAll(".tabpane > [data-g]").forEach(el => {
+    const handle = el.querySelector(":scope > label") ||
+                   el.querySelector(":scope > summary") || el;
+    handle.setAttribute("draggable", "true");
+    handle.addEventListener("dragstart", e => {
+      dragEl = el; el.classList.add("dragging");
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData("text/plain", el.dataset.g);
+    });
+    handle.addEventListener("dragend", () => {
+      el.classList.remove("dragging"); dragEl = null; saveLayout();
+    });
+    el.addEventListener("dragover", e => {
+      if (!dragEl || dragEl === el || dragEl.parentElement !== el.parentElement) return;
+      e.preventDefault();
+      const r = el.getBoundingClientRect();
+      el.parentElement.insertBefore(dragEl, e.clientY < r.top + r.height / 2 ? el : el.nextSibling);
+    });
   });
 
   $("#savesl").onclick = async e => {
