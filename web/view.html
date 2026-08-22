@@ -431,10 +431,19 @@
       <button class="csvbtn" id="prRun" style="display:block; width:100%; text-align:center; background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; padding:8px">▶ Прогнать по папкам среза</button>
       <label style="display:flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; margin-top:8px">
         <input type="checkbox" id="presSort"> сортировать папки по баллам</label>
-      <input type="search" id="presF" placeholder="score_tool>=70 · type=информационный" style="margin-top:8px">
-      <div class="hint">фильтр папок по оценкам: <b>поле&gt;=N</b> (числа) или
-      <b>поле=текст</b>; папки без оценки скрываются. Excel-выгрузка учитывает фильтр,
-      а все поля оценок становятся колонками листа «Маркеры»</div>
+      <div style="display:flex; gap:7px; margin-top:8px">
+        <select id="pfField" style="flex:1"><option value="">— фильтр по оценкам —</option></select>
+        <select id="pfOp" style="width:64px; display:none">
+          <option value=">=">≥</option><option value="<=">≤</option>
+          <option value=">">&gt;</option><option value="<">&lt;</option>
+          <option value="=">=</option>
+        </select>
+        <input type="number" id="pfNum" style="width:76px; display:none" value="50">
+      </div>
+      <div id="pfVals" style="max-height:160px; overflow-y:auto; margin-top:6px; font-size:13px"></div>
+      <div class="hint">поля берутся из JSON-ответа: числовые — порог, текстовые —
+      галочки (условие ИЛИ). Папки без оценки при фильтре скрываются; Excel-выгрузка
+      учитывает фильтр, все поля оценок — колонки листа «Маркеры»</div>
       <div class="hint" id="prProg">оцениваются только сформированные папки текущего среза
       (≥ мин. размера); «Без группы» не участвует. В группу передаются топ-10 фраз</div>
     </div>
@@ -486,7 +495,7 @@ const state = {cols: ["openai"], mode: "hard",
                minusWords: [],       // минус-слова: фразы с ними (в любой форме) вне кластеризации
                searchOnly: false,    // при поиске показывать в папках только совпавшие фразы
                presSort: false,      // сортировать папки по баллам промт-оценки
-               presFilter: "",       // фильтр папок по оценкам: «score_tool>=70»
+               presFlt: null,        // фильтр по оценкам: {field, kind, op/num | vals[]}
                anOn: false, anQ: [""], anFocus: null,  // режим анализа: столбцы-поиски
                cmpTpls: [],          // имена шаблонов, включённых в сравнение колонками
                targetGeo: "",        // целевой регион: его гео = «без гео»
@@ -924,6 +933,7 @@ async function evalCluster(c, btn){
       PRES[Q[c.top]] = rest;
       dbSet("sem_pres:" + (PID || "demo"), PRES);
     }
+    renderPresFlt();
     render();
   }catch(err){
     btn.textContent = "✗"; btn.disabled = false;
@@ -1045,6 +1055,12 @@ function render(){
     renderQueued = false;
     const cols = await getCols();
     const work = $("#work");
+    // запомнить прокрутку каждой колонки — обновление данных не должно кидать вверх
+    const scrollPos = {};
+    work.querySelectorAll(".col").forEach(el => {
+      const l = el.querySelector(".list");
+      if (el.dataset.key && l) scrollPos[el.dataset.key] = l.scrollTop;
+    });
     work.innerHTML = "";
     work.classList.toggle("tworow", cols.length > 4);
     let rowTop = work, rowBottom = work;
@@ -1089,6 +1105,7 @@ function render(){
     for (const col of cols){
       const el = document.createElement("div");
       el.className = "col";
+      el.dataset.key = col.key || col.prov;
       const q = col.q || "";
       const minS = col.minSize ?? state.minSize;
       const ovMap = ovMaps ? ovMaps[col.prov] : null;
@@ -1100,8 +1117,7 @@ function render(){
       if (state.presSort && Object.keys(PRES).length)
         clusters = [...clusters].sort((x, y) =>
           (scoreOf(PRES[Q[y.top]]) ?? -1) - (scoreOf(PRES[Q[x.top]]) ?? -1));
-      const pf = parsePresF(state.presFilter);
-      if (pf) clusters = clusters.filter(c => testPres(PRES[Q[c.top]], pf));
+      if (presFltActive()) clusters = clusters.filter(c => testPresF(PRES[Q[c.top]]));
       if (isOther && ovMap){
         clusters = clusters.filter(c => ovMap.has(c.label));
         clusters.sort((x, y) => (ovMap.get(y.label)) - (ovMap.get(x.label)));
@@ -1216,6 +1232,8 @@ function render(){
       }
       el.appendChild(list);
       (cols.indexOf(col) < topCount ? rowTop : rowBottom).appendChild(el);
+      const sp = scrollPos[el.dataset.key];
+      if (sp) requestAnimationFrame(() => { list.scrollTop = sp; });
     }
     const rs = $("#resetSel");
     if (rs) rs.onclick = () => { state.sel = null; render(); };
@@ -1301,7 +1319,7 @@ function savePrefs(){ dbSet("sem_prefs:" + (PID || "demo"),
    targetGeo: state.targetGeo, mode: state.mode,
    anOn: state.anOn, anQ: state.anQ, cmpTpls: state.cmpTpls,
    minusWords: state.minusWords, searchOnly: state.searchOnly,
-   presSort: state.presSort, presFilter: state.presFilter,
+   presSort: state.presSort, presFlt: state.presFlt,
    fMode: state.fMode, fMin: state.fMin, fMetric: state.fMetric}); }
 
 // ---------- шаблоны фильтров ----------
@@ -1389,9 +1407,8 @@ function loadXLSX(){
 
 async function exportSlice(){
   const {vkey, clusters: allClusters} = await sliceClusters();
-  const pf = parsePresF(state.presFilter);
-  const clusters = pf
-    ? allClusters.filter(c => c.idxs.length < state.minSize || testPres(PRES[Q[c.top]], pf))
+  const clusters = presFltActive()
+    ? allClusters.filter(c => c.idxs.length < state.minSize || testPresF(PRES[Q[c.top]]))
     : allClusters;
   // все поля оценок → колонки листа «Маркеры»
   const presKeys = [];
@@ -1490,27 +1507,72 @@ async function exportSlice(){
 }
 
 /* ---------- прогон пользовательского промта по папкам среза ---------- */
-/* фильтр папок по оценкам: «score_tool>=70», «type=информационный» */
-function parsePresF(s){
-  const m = (s || "").trim().match(/^([a-zа-яё_][\wа-яё_]*)\s*(>=|<=|=|>|<)\s*(.+)$/i);
-  return m ? {f: m[1].toLowerCase(), op: m[2], v: m[3].trim().toLowerCase()} : null;
-}
-function testPres(r, pf){
-  if (!r || typeof r !== "object") return false;
-  let val;
-  for (const [k, v] of Object.entries(r))
-    if (k.toLowerCase() === pf.f){ val = v; break; }
-  if (val === undefined) return false;
-  const num = parseFloat(pf.v);
-  if (!isNaN(num) && typeof val === "number")
-    switch (pf.op){
-      case ">=": return val >= num;
-      case "<=": return val <= num;
-      case ">": return val > num;
-      case "<": return val < num;
-      default: return val === num;
+/* фильтр папок по оценкам: поля берутся из фактических JSON-ответов */
+function presFields(){
+  const num = new Set(), txt = new Set();
+  for (const v of Object.values(PRES)){
+    if (!v || typeof v !== "object") continue;
+    for (const [k, val] of Object.entries(v)){
+      if (typeof val === "number") num.add(k);
+      else if (typeof val === "string" && val) txt.add(k);
     }
-  return String(val).toLowerCase().includes(pf.v);
+  }
+  return {num: [...num], txt: [...txt].filter(k => !num.has(k))};
+}
+function presVals(field){
+  const cnt = {};
+  for (const v of Object.values(PRES)){
+    const x = v && v[field];
+    if (typeof x === "string" && x) cnt[x] = (cnt[x] || 0) + 1;
+  }
+  return Object.entries(cnt).sort((a, b) => b[1] - a[1]).slice(0, 30);
+}
+function presFltActive(){ return !!(state.presFlt && state.presFlt.field); }
+function testPresF(r){
+  const f = state.presFlt;
+  if (!presFltActive()) return true;
+  if (!r || typeof r !== "object") return false;
+  const v = r[f.field];
+  if (f.kind === "num"){
+    if (typeof v !== "number") return false;
+    switch (f.op){
+      case ">=": return v >= f.num;
+      case "<=": return v <= f.num;
+      case ">": return v > f.num;
+      case "<": return v < f.num;
+      default: return v === f.num;
+    }
+  }
+  return !f.vals.length || f.vals.includes(String(v));
+}
+function renderPresFlt(){
+  const sel = $("#pfField");
+  if (!sel) return;
+  const {num, txt} = presFields();
+  const cur = state.presFlt || {};
+  sel.innerHTML = '<option value="">— фильтр по оценкам —</option>' +
+    num.map(k => `<option value="n:${esc(k)}">${esc(k)} (число)</option>`).join("") +
+    txt.map(k => `<option value="t:${esc(k)}">${esc(k)} (текст)</option>`).join("");
+  sel.value = cur.field ? (cur.kind === "num" ? "n:" : "t:") + cur.field : "";
+  if (sel.value === "" && cur.field) sel.value = "";  // поле исчезло из данных
+  const isNum = cur.field && cur.kind === "num";
+  $("#pfOp").style.display = isNum ? "" : "none";
+  $("#pfNum").style.display = isNum ? "" : "none";
+  if (isNum){ $("#pfOp").value = cur.op || ">="; $("#pfNum").value = cur.num ?? 50; }
+  const pv = $("#pfVals");
+  if (cur.field && cur.kind === "txt"){
+    pv.innerHTML = presVals(cur.field).map(([v, n]) =>
+      `<label style="display:flex; align-items:center; gap:7px; padding:2px 0; cursor:pointer">
+        <input type="checkbox" class="pfv" value="${esc(v).replace(/"/g, "&quot;")}"
+          ${cur.vals.includes(v) ? "checked" : ""}> ${esc(v)}
+        <span style="color:var(--muted); margin-left:auto">${n}</span></label>`).join("");
+    pv.querySelectorAll(".pfv").forEach(cb => cb.onchange = () => {
+      const set = new Set(state.presFlt.vals);
+      cb.checked ? set.add(cb.value) : set.delete(cb.value);
+      state.presFlt.vals = [...set];
+      savePrefs(); render();
+    });
+  } else pv.innerHTML = "";
 }
 
 async function runPromptEval(){
@@ -1553,6 +1615,7 @@ async function runPromptEval(){
   dbSet("sem_pres:" + (PID || "demo"), PRES);
   const usd = (usage.in * 0.28 + usage.out * 0.42) / 1e6;
   prog.textContent = `Готово: оценено ${Object.keys(PRES).length} папок · ~$${usd.toFixed(3)}${failed ? ` · ошибок батчей: ${failed}` : ""}`;
+  renderPresFlt();
   render();
 }
 
@@ -1664,10 +1727,27 @@ async function boot(){
   };
   $("#prRun").onclick = e => { e.preventDefault(); runPromptEval(); };
   $("#presSort").addEventListener("change", e => { state.presSort = e.target.checked; savePrefs(); render(); });
-  let pfT;
-  $("#presF").addEventListener("input", e => {
-    clearTimeout(pfT);
-    pfT = setTimeout(() => { state.presFilter = e.target.value; state.shown = {}; savePrefs(); render(); }, 350);
+  $("#pfField").addEventListener("change", () => {
+    const v = $("#pfField").value;
+    if (!v) state.presFlt = null;
+    else {
+      const kind = v.startsWith("n:") ? "num" : "txt";
+      state.presFlt = kind === "num"
+        ? {field: v.slice(2), kind, op: ">=", num: +$("#pfNum").value || 50}
+        : {field: v.slice(2), kind, vals: []};
+    }
+    state.shown = {};
+    savePrefs(); renderPresFlt(); render();
+  });
+  $("#pfOp").addEventListener("change", () => {
+    if (state.presFlt){ state.presFlt.op = $("#pfOp").value; savePrefs(); render(); }
+  });
+  let pfnT;
+  $("#pfNum").addEventListener("input", () => {
+    clearTimeout(pfnT);
+    pfnT = setTimeout(() => {
+      if (state.presFlt){ state.presFlt.num = +$("#pfNum").value || 0; savePrefs(); render(); }
+    }, 350);
   });
   $("#prSel").addEventListener("change", () => {
     const p = PRLIB[+$("#prSel").value];
@@ -1781,11 +1861,9 @@ async function boot(){
     $("#prSchema").value = PRLIB[0].schema || "";
     $("#prSel").value = "0";
   }
+  renderPresFlt();
   if (prefs.presSort){ state.presSort = true; $("#presSort").checked = true; }
-  if (typeof prefs.presFilter === "string"){
-    state.presFilter = prefs.presFilter;
-    $("#presF").value = state.presFilter;
-  }
+  if (prefs.presFlt && prefs.presFlt.field) state.presFlt = prefs.presFlt;
   if (prefs.anOn){
     state.anOn = true;
     $("#anOn").checked = true;
