@@ -11,7 +11,15 @@ function dbSet(key, value){
     fetch("api/prefs/" + encodeURIComponent(key),
       {method: "POST", credentials: "same-origin",
        headers: {"Content-Type": "application/json"},
-       body: JSON.stringify({value})}).catch(() => {});
+       body: JSON.stringify({value})})
+      .then(r => { if (!r.ok) throw new Error(r.status); })
+      .catch(e => {
+        // не молчать: иначе корзина/правила «пропадают» после перезагрузки
+        console.error("prefs save failed", key, e);
+        if (key.startsWith("sem_trash") || key.startsWith("sem_rules"))
+          alert("Не удалось сохранить " + (key.startsWith("sem_trash") ? "корзину" : "правила") +
+                " на сервер (" + e.message + ") — после перезагрузки изменения могут потеряться.");
+      });
   }, 400);
 }
 async function dbGet(key){

@@ -32,7 +32,8 @@ async def set_pref(key: str, request: Request, user: sqlite3.Row = Depends(curre
         raise HTTPException(400, "Некорректный ключ")
     body = await request.json()
     value = json.dumps(body.get("value"), ensure_ascii=False)
-    if len(value) > 100_000:
+    # корзина/правила/оценки на больших ядрах — сотни тысяч фраз; 50 МБ с запасом
+    if len(value) > 50_000_000:
         raise HTTPException(400, "Слишком большое значение")
     with db() as c:
         c.execute("INSERT INTO user_prefs(user_id,key,value,updated) VALUES(?,?,?,?) "
