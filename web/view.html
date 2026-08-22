@@ -1490,29 +1490,6 @@ async function exportSlice(){
 }
 
 /* ---------- прогон пользовательского промта по папкам среза ---------- */
-const DEFAULT_PROMPT = {
-  name: "Инструментность (0–100)",
-  prompt: `[удалено — личный промт]
-
-[удалено]
-[удалено]
-[удалено]
-
-[удалено]`,
-  schema: `{"score": <0-100>, "tool": "<короткое название инструмента или ->", "why": "<одна фраза почему>"}`
-};
-
-const AUDIT_PROMPT = {
-  name: "Полный аудит (тип + баллы)",
-  prompt: `[удалено — личный промт]
-[удалено]
-[удалено]
-[удалено]
-[удалено]
-[удалено]`,
-  schema: `{"type": "<инструмент|информационный|коммерческий|навигационный|смешанный>", "score_tool": <0-100>, "score_info": <0-100>, "score_comm": <0-100>, "tool": "<название инструмента или ->", "why": "<одна фраза почему>"}`
-};
-
 /* фильтр папок по оценкам: «score_tool>=70», «type=информационный» */
 function parsePresF(s){
   const m = (s || "").trim().match(/^([a-zа-яё_][\wа-яё_]*)\s*(>=|<=|=|>|<)\s*(.+)$/i);
@@ -1797,12 +1774,13 @@ async function boot(){
   const rl = await dbGet("sem_rules:" + (PID || "demo"));
   if (rl && Array.isArray(rl.must) && Array.isArray(rl.not)) RULES = rl;
   PRES = (await dbGet("sem_pres:" + (PID || "demo"))) || {};
-  PRLIB = (await dbGet("sem_prompts")) || [DEFAULT_PROMPT, AUDIT_PROMPT];
-  if (!PRLIB.length) PRLIB = [DEFAULT_PROMPT, AUDIT_PROMPT];
+  PRLIB = (await dbGet("sem_prompts")) || [];
   renderPrLib();
-  $("#prText").value = PRLIB[0].prompt;
-  $("#prSchema").value = PRLIB[0].schema || "";
-  $("#prSel").value = "0";
+  if (PRLIB.length){
+    $("#prText").value = PRLIB[0].prompt;
+    $("#prSchema").value = PRLIB[0].schema || "";
+    $("#prSel").value = "0";
+  }
   if (prefs.presSort){ state.presSort = true; $("#presSort").checked = true; }
   if (typeof prefs.presFilter === "string"){
     state.presFilter = prefs.presFilter;
