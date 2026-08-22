@@ -184,6 +184,18 @@
   .badge.qb{color:var(--accent); border-color:var(--accent)}
   .badge.int{font-weight:700}
   .badge.pres{color:var(--accent2, #38c793); border-color:var(--accent2, #38c793); cursor:help}
+  /* фиксированные слоты в шапке папки — бейджи стоят колонками и не «плывут» */
+  .fhead .slot{flex:none; display:flex; justify-content:flex-end}
+  .fhead .slot:empty{display:flex}
+  .slot.sint{width:34px}
+  .slot.sq{width:52px}
+  .slot.sp{width:56px}
+  .slot.scmp{width:0}
+  .slot.scmp:not(:empty){width:auto}
+  .slot.scnt{width:96px}
+  .slot.ssum{width:76px}
+  #work.tworow .slot.scnt{width:82px}
+  #work.tworow .slot.ssum{width:64px}
   .badge.int.ii,.pint.ii{color:#5b8cff; border-color:#5b8cff}
   .badge.int.ik,.pint.ik{color:#e5a93d; border-color:#e5a93d}
   .badge.int.it,.pint.it{color:#38c793; border-color:#38c793}
@@ -857,18 +869,19 @@ function folderEl(c, col, overlap){
   const name = c.name || Q[c.top];
   const consTitle = c.same === true ? "Состав совпал во всех включённых вариантах"
     : c.same === false ? "Состав отличается в: " + (c.diffWith || []).join(", ") : "";
+  const presR = PRES[Q[c.top]];
   div.innerHTML = `<div class="fhead"><span class="icon" title="${esc(consTitle)}">${c.icon || "📁"}</span>
       <span class="name" title="${esc(name)}">${hi(name, col.q || "")}</span>
-      ${c.dom ? `<span class="badge int ${INT_CLS[c.dom] || ""}${c.mixed ? " mx" : ""}" title="Интент кластера: ${esc(c.dom)}${c.mixed ? " (смешанный — есть второй интент ≥25%)" : ""}">${INT_SHORT[c.dom] || "?"}${c.mixed ? "⚠" : ""}</span>` : ""}
       ${c.geo ? `<span class="badge geo" title="Гео-кластер">📍 ${esc(c.geo)}</span>` : ""}
-      ${c.qn ? `<span class="badge qb" title="Вопросных фраз">❓ ${Math.round(c.qn / c.idxs.length * 100)}%</span>` : ""}
-      ${PRES[Q[c.top]] !== undefined ? `<span class="badge pres" title="Клик — почему такая оценка">⚙ ${scoreOf(PRES[Q[c.top]]) ?? "✓"}</span>` : ""}
-      ${isAB() && !state.anOn && !col.tpl ? `<button class="cmp" title="Найти эти фразы в соседней колонке">⇄</button>` : ""}
+      ${overlap ? `<span class="badge ov">${overlap} общ.</span>` : ""}
+      <span class="slot sint">${c.dom ? `<span class="badge int ${INT_CLS[c.dom] || ""}${c.mixed ? " mx" : ""}" title="Интент кластера: ${esc(c.dom)}${c.mixed ? " (смешанный — есть второй интент ≥25%)" : ""}">${INT_SHORT[c.dom] || "?"}${c.mixed ? "⚠" : ""}</span>` : ""}</span>
+      <span class="slot sq">${c.qn ? `<span class="badge qb" title="Вопросных фраз">❓ ${Math.round(c.qn / c.idxs.length * 100)}%</span>` : ""}</span>
+      <span class="slot sp">${presR !== undefined ? `<span class="badge pres">⚙ ${scoreOf(presR) ?? "✓"}</span>` : ""}</span>
+      <span class="slot scmp">${isAB() && !state.anOn && !col.tpl ? `<button class="cmp" title="Найти эти фразы в соседней колонке">⇄</button>` : ""}</span>
       <button class="copy" title="Скопировать уникальные фразы кластера (без дублей)">⧉</button>
       <button class="copy peval" title="Оценить кластер текущим промтом (таб «Промты») через DeepSeek">⚙</button>
-      ${overlap ? `<span class="badge ov">${overlap} общ.</span>` : ""}
-      <span class="badge" title="Уникальных смыслов${c.dups ? ` + склеенных дублей` : ""}">${fmt(c.idxs.length)}${c.dups ? `+${fmt(c.dups)}` : ""} фраз</span>
-      <span class="badge">Σ ${fmt(c.sum)}</span></div>`;
+      <span class="slot scnt"><span class="badge" title="Уникальных смыслов${c.dups ? ` + склеенных дублей` : ""}">${fmt(c.idxs.length)}${c.dups ? `+${fmt(c.dups)}` : ""} фраз</span></span>
+      <span class="slot ssum"><span class="badge">Σ ${fmt(c.sum)}</span></span></div>`;
   const head = div.firstElementChild;
   head.querySelector(".copy").addEventListener("click", e => {
     e.stopPropagation();
