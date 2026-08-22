@@ -673,7 +673,7 @@ function loadPrefs(){ try{ const pr = JSON.parse(localStorage.getItem("sem_prefs
   return pr; }catch(e){ return {}; } }
 function savePrefs(){ try{ localStorage.setItem("sem_prefs:" + (PID || "demo"), JSON.stringify(
   {view: state.cols, search: state.search, sliders: state.sliders,
-   targetGeo: state.targetGeo})); }catch(e){} }
+   targetGeo: state.targetGeo, mode: state.mode})); }catch(e){} }
 
 // ---------- шаблоны фильтров (localStorage) ----------
 function loadTpls(){ try{ const t = JSON.parse(localStorage.getItem("sem_tpl") || "[]");
@@ -828,6 +828,7 @@ async function boot(){
   segInit($("#segMode"), null, state.mode, v => {
     state.mode = v; state.sel = null; state.shown = {};
     $("#modeHint").textContent = MODE_HINT[v];
+    savePrefs();
     render();
   });
   $("#modeHint").textContent = MODE_HINT[state.mode];
@@ -867,6 +868,11 @@ async function boot(){
   state.sliders = prefs.sliders || {};
   if (typeof prefs.search === "string") state.search = prefs.search;
   if (typeof prefs.targetGeo === "string") state.targetGeo = prefs.targetGeo;
+  if (["hard", "avg", "soft"].includes(prefs.mode)){
+    state.mode = prefs.mode;
+    document.querySelectorAll("#segMode button").forEach(b => b.classList.toggle("on", b.dataset.v === state.mode));
+    $("#modeHint").textContent = MODE_HINT[state.mode];
+  }
   $("#targetGeo").value = state.targetGeo;
   // даталист: топ-30 гео по числу фраз
   if (G){
