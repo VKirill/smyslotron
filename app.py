@@ -55,6 +55,9 @@ def init_db() -> None:
             pw TEXT NOT NULL, created TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS sessions(
             token TEXT PRIMARY KEY, user_id INTEGER NOT NULL, created TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS mapping_templates(
+            sig TEXT PRIMARY KEY, mapping TEXT NOT NULL,
+            uses INTEGER DEFAULT 1, updated TEXT NOT NULL);
         CREATE TABLE IF NOT EXISTS projects(
             id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, name TEXT NOT NULL,
             status TEXT NOT NULL, task TEXT DEFAULT '',
@@ -239,6 +242,37 @@ def guess_mapping(text: str) -> dict:
             "previews": previews}
 
 
+def header_sig(text: str) -> str:
+    """Подпись формата файла: sha1 первой непустой строки (заголовка)."""
+    for l in text.splitlines():
+        if l.strip():
+            return hashlib.sha1(l.strip().lower().encode()).hexdigest()
+    return ""
+
+
+_TPL_KEYS = ("delimiter", "has_header", "query_col", "base_col", "exact_col",
+             "vexact_col", "topo_col", "ques_col")
+
+
+def save_template(body: dict) -> None:
+    """Запоминаем подтверждённый пользователем маппинг под подписью заголовка —
+    следующий файл того же формата размапится автоматически (для всех пользователей)."""
+    if not body.get("has_header"):
+        return
+    up = UPLOADS / f"{re.sub(r'[^a-f0-9]', '', body.get('upload_id', ''))}.txt"
+    if not up.exists():
+        return
+    sig = header_sig(up.read_text(encoding="utf-8"))
+    if not sig:
+        return
+    tpl = {k: body.get(k) for k in _TPL_KEYS}
+    with db() as c:
+        c.execute("INSERT INTO mapping_templates(sig,mapping,uses,updated) VALUES(?,?,1,?) "
+                  "ON CONFLICT(sig) DO UPDATE SET mapping=excluded.mapping, "
+                  "uses=uses+1, updated=excluded.updated",
+                  (sig, json.dumps(tpl), time.strftime("%F %T")))
+
+
 @app.post(P + "/uploads")
 async def upload(request: Request, file: UploadFile = File(...),
                  user: sqlite3.Row = Depends(current_user)):
@@ -247,6 +281,17 @@ async def upload(request: Request, file: UploadFile = File(...),
         raise HTTPException(400, f"Файл больше {MAX_UPLOAD_MB} МБ")
     text = decode_upload(raw)
     guess = guess_mapping(text)
+    with db() as c:
+        row = c.execute("SELECT mapping FROM mapping_templates WHERE sig=?",
+                        (header_sig(text),)).fetchone()
+    if row:
+        tpl = json.loads(row["mapping"])
+        ncols = max((len(r) for r in guess["previews"].get(tpl.get("delimiter", ";"), [[]])),
+                    default=0)
+        # применяем шаблон, только если колонки влезают в реальную ширину файла
+        if 0 <= int(tpl.get("query_col", -1)) < ncols:
+            guess.update({k: tpl[k] for k in _TPL_KEYS if k in tpl})
+            guess["template"] = True
     UPLOADS.mkdir(exist_ok=True)
     for old in UPLOADS.glob("*.txt"):  # чистим брошенные загрузки старше часа
         if time.time() - old.stat().st_mtime > 3600:
@@ -315,6 +360,7 @@ async def create_project(request: Request, user: sqlite3.Row = Depends(current_u
                              (user["id"],)).fetchone()[0]
     if n_active >= MAX_PROJECTS:
         raise HTTPException(400, f"Лимит {MAX_PROJECTS} проектов — удали старый")
+    save_template(body)
     rows_out = parse_upload_rows(body)
     if len(rows_out) < 10:
         raise HTTPException(400, "После разбора осталось меньше 10 фраз — проверь колонки и разделитель")
@@ -424,6 +470,7 @@ async def append_project(pid: str, request: Request,
     if row["status"] == "running":
         raise HTTPException(400, "Дождись окончания текущей обработки")
     body = await request.json()
+    save_template(body)
     new_rows = parse_upload_rows(body)
     pdir = project_dir(row)
 
@@ -474,8 +521,11 @@ async def append_project(pid: str, request: Request,
         (ddir / "meta.json").unlink(missing_ok=True)
 
     entry = f"{time.strftime('%F')} +{added}"
+    # defer_run: при мультизагрузке очередь ставится одним /run после последнего файла,
+    # иначе воркер может стартовать между файлами и второй append упрётся в running
+    status_sql = "" if body.get("defer_run") else "status='queued', task='cluster', "
     with db() as c:
-        c.execute("UPDATE projects SET rows=?, status='queued', task='cluster', "
+        c.execute(f"UPDATE projects SET rows=?, {status_sql}"
                   "error='', retries=0, history=CASE WHEN history='' THEN ? "
                   "ELSE history || ' · ' || ? END WHERE id=?",
                   (len(existing), entry, entry, pid))

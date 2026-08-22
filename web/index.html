@@ -158,17 +158,17 @@ async function renderProjects(){
   $("#main").innerHTML = `
     <div class="drop" id="drop">Перетащи сюда CSV/TXT с запросами<br>
       <span style="font-size:12.5px">или кликни, чтобы выбрать файл · до 100 000 фраз · Keys.so, Key Collector, Wordstat — колонки настроишь на следующем шаге</span>
-      <input id="file" type="file" accept=".csv,.txt,.tsv" hidden></div>
+      <input id="file" type="file" accept=".csv,.txt,.tsv" multiple hidden></div>
     <div id="plist"></div>`;
   const drop = $("#drop"), file = $("#file");
   drop.onclick = () => file.click();
   drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
   drop.ondragleave = () => drop.classList.remove("over");
   drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over");
-    if (e.dataTransfer.files[0]) startUpload(e.dataTransfer.files[0]); };
+    if (e.dataTransfer.files.length) startUpload(e.dataTransfer.files); };
   file.onchange = () => {
     const target = APPEND_PID; APPEND_PID = null;
-    if (file.files[0]) startUpload(file.files[0], target);
+    if (file.files.length) startUpload(file.files, target);
     file.value = "";
   };
   await refreshList();
@@ -238,18 +238,53 @@ const VARIANTS = [
 ];
 const COLS = [["query", "Запрос"], ["base", "Wordstat"], ["exact", "\"!Wordstat\""], ["vexact", "\"[!Wordstat]\""], ["topo", "Топоним"], ["ques", "Вопрос"]];
 
-async function startUpload(f, appendPid){
-  loading(true);
-  try{
-    const fd = new FormData();
-    fd.append("file", f);
-    const up = await api("uploads", {method: "POST", body: fd});
-    openMapper(up, appendPid || null);
-  }catch(e){ alert(e.message); }
-  loading(false);
+function upMapping(up){
+  return {upload_id: up.upload_id, delimiter: up.delimiter, has_header: up.has_header,
+          query_col: up.query_col, base_col: up.base_col, exact_col: up.exact_col,
+          vexact_col: up.vexact_col ?? -1, topo_col: up.topo_col ?? -1, ques_col: up.ques_col ?? -1};
 }
 
-function openMapper(up, appendPid){
+async function startUpload(files, appendPid){
+  files = [...files];
+  if (!appendPid && files.length > 1){
+    alert("Новый проект создаётся из одного файла — возьму первый. Несколько файлов можно склеить на вкладке «Объединить CSV» или докинуть в проект через «➕ Фразы».");
+    files = files.slice(0, 1);
+  }
+  const results = [];
+  let okCount = 0;
+  for (const f of files){
+    try{
+      loading(true);
+      const fd = new FormData();
+      fd.append("file", f);
+      const up = await api("uploads", {method: "POST", body: fd});
+      if (appendPid && up.template && up.query_col >= 0){
+        // формат уже знаком — добавляем сразу, без маппера
+        const r = await api(`projects/${appendPid}/append`,
+          {method: "POST", headers: {"Content-Type": "application/json"},
+           body: JSON.stringify({...upMapping(up), defer_run: true})});
+        results.push(`${f.name}: +${r.added.toLocaleString("ru-RU")} новых, дублей ${r.merged.toLocaleString("ru-RU")} — формат узнан автоматически`);
+        okCount++;
+        loading(false);
+      } else {
+        loading(false);
+        const res = await new Promise(done => openMapper(up, appendPid || null, done));
+        if (res === null) break;               // отмена — прерываем очередь
+        if (res){ results.push(`${f.name}: ${res}`); okCount++; }
+      }
+    }catch(e){ loading(false); results.push(`${f.name}: ошибка — ${e.message}`); }
+  }
+  if (appendPid && (results.length || okCount)){
+    if (okCount){
+      try{ await api(`projects/${appendPid}/run`, {method: "POST"}); }catch(e){}
+    }
+    alert(`Пополнение проекта:\n${results.join("\n")}\n\n${okCount ? "Пересчёт запущен." : "Ничего не добавлено."}`);
+    refreshList();
+  }
+}
+
+function openMapper(up, appendPid, done){
+  done = done || (() => {});
   const m = document.createElement("div");
   m.className = "modal";
   const sel = {delimiter: up.delimiter, has_header: up.has_header,
@@ -257,6 +292,7 @@ function openMapper(up, appendPid){
                vexact: up.vexact_col ?? -1, topo: up.topo_col ?? -1, ques: up.ques_col ?? -1};
   m.innerHTML = `<div class="mbox">
     <h2>${appendPid ? "Докинуть фразы в проект" : "Настрой файл под систему"}</h2>
+    ${up.template ? `<div style="color:var(--accent2); font-size:12.5px; margin:-8px 0 10px">✓ Формат файла узнан по прошлым загрузкам — колонки подставлены автоматически, проверь и подтверди</div>` : ""}
     <div class="mrow">
       <div class="fld"><label>Название проекта</label><input id="mName" value="${esc(up.name)}"></div>
       <div class="fld"><label>Разделитель колонок</label><select id="mDelim">
@@ -330,7 +366,7 @@ function openMapper(up, appendPid){
     drawTable();
   };
   m.querySelector("#mHdr").onchange = e => { sel.has_header = e.target.checked; drawTable(); };
-  m.querySelector("#mCancel").onclick = () => m.remove();
+  m.querySelector("#mCancel").onclick = () => { m.remove(); done(null); };
   m.querySelector("#mGo").onclick = async () => {
     if (sel.query < 0){ m.querySelector("#mErr").textContent = "Укажи, в какой колонке запросы"; return; }
     loading(true);
@@ -338,12 +374,17 @@ function openMapper(up, appendPid){
       const mapping = {upload_id: up.upload_id,
           delimiter: sel.delimiter, has_header: sel.has_header,
           query_col: sel.query, base_col: sel.base, exact_col: sel.exact,
-          vexact_col: sel.vexact, topo_col: sel.topo, ques_col: sel.ques};
+          vexact_col: sel.vexact, topo_col: sel.topo, ques_col: sel.ques,
+          defer_run: !!appendPid};
       if (appendPid){
         const r = await api(`projects/${appendPid}/append`,
           {method: "POST", headers: {"Content-Type": "application/json"},
            body: JSON.stringify(mapping)});
-        alert(`Добавлено новых фраз: ${r.added.toLocaleString("ru-RU")}, схлопнуто дублей: ${r.merged.toLocaleString("ru-RU")}. Итого в проекте: ${r.rows.toLocaleString("ru-RU")}. Пересчёт запущен.`);
+        m.remove();
+        refreshList();
+        done(`+${r.added.toLocaleString("ru-RU")} новых, дублей ${r.merged.toLocaleString("ru-RU")} (итого ${r.rows.toLocaleString("ru-RU")})`);
+        loading(false);
+        return;
       } else {
         const vmode = m.querySelector('input[name="vmode"]:checked').value;
         const variants = vmode === "single"
@@ -355,6 +396,7 @@ function openMapper(up, appendPid){
       }
       m.remove();
       refreshList();
+      done("");
     }catch(e){ m.querySelector("#mErr").textContent = e.message; }
     loading(false);
   };
