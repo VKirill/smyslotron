@@ -419,6 +419,10 @@
       <button class="csvbtn" id="prRun" style="display:block; width:100%; text-align:center; background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; padding:8px">▶ Прогнать по папкам среза</button>
       <label style="display:flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; margin-top:8px">
         <input type="checkbox" id="presSort"> сортировать папки по баллам</label>
+      <input type="search" id="presF" placeholder="score_tool>=70 · type=информационный" style="margin-top:8px">
+      <div class="hint">фильтр папок по оценкам: <b>поле&gt;=N</b> (числа) или
+      <b>поле=текст</b>; папки без оценки скрываются. Excel-выгрузка учитывает фильтр,
+      а все поля оценок становятся колонками листа «Маркеры»</div>
       <div class="hint" id="prProg">оцениваются только сформированные папки текущего среза
       (≥ мин. размера); «Без группы» не участвует. В группу передаются топ-10 фраз</div>
     </div>
@@ -470,6 +474,7 @@ const state = {cols: ["openai"], mode: "hard",
                minusWords: [],       // минус-слова: фразы с ними (в любой форме) вне кластеризации
                searchOnly: false,    // при поиске показывать в папках только совпавшие фразы
                presSort: false,      // сортировать папки по баллам промт-оценки
+               presFilter: "",       // фильтр папок по оценкам: «score_tool>=70»
                anOn: false, anQ: [""], anFocus: null,  // режим анализа: столбцы-поиски
                cmpTpls: [],          // имена шаблонов, включённых в сравнение колонками
                targetGeo: "",        // целевой регион: его гео = «без гео»
@@ -878,7 +883,11 @@ function folderEl(c, col, overlap){
   const pe = head.querySelector(".peval");
   if (pe) pe.addEventListener("click", e => { e.stopPropagation(); evalCluster(c, pe); });
   const pb = head.querySelector(".badge.pres");
-  if (pb) pb.addEventListener("click", e => { e.stopPropagation(); showPresPop(e, PRES[Q[c.top]]); });
+  if (pb){
+    pb.addEventListener("mouseenter", () => { popCancelHide(); showPresPop(pb, PRES[Q[c.top]]); });
+    pb.addEventListener("mouseleave", popHideSoon);
+    pb.addEventListener("click", e => e.stopPropagation());
+  }
   head.addEventListener("click", () => toggleFolder(div, c, col));
   head.addEventListener("contextmenu", e => { e.preventDefault(); showCtx(e, c); });
   return div;
@@ -909,21 +918,29 @@ async function evalCluster(c, btn){
   }
 }
 
-function showPresPop(e, r){
+let _popT;
+function popHideSoon(){ clearTimeout(_popT); _popT = setTimeout(hideCtx, 250); }
+function popCancelHide(){ clearTimeout(_popT); }
+
+function showPresPop(anchor, r){
   hideCtx();
   if (!r) return;
   const m = document.createElement("div");
   m.id = "ctxmenu";           // общий id — закрытие кликом/Esc/скроллом уже работает
   m.className = "prespop";
   m.onclick = ev => ev.stopPropagation();
+  m.onmouseenter = popCancelHide;
+  m.onmouseleave = popHideSoon;
   const sc = scoreOf(r);
   m.innerHTML = `<div class="pscore">⚙ ${sc !== null ? sc : "—"}</div>` +
     Object.entries(r).filter(([k, v]) => k !== "score" && v !== "" && v !== null)
       .map(([k, v]) => `<div class="pfield"><b>${esc(k)}</b>${esc(typeof v === "object" ? JSON.stringify(v) : String(v))}</div>`).join("");
   document.body.appendChild(m);
+  const rect = anchor.getBoundingClientRect ? anchor.getBoundingClientRect() : null;
+  const px = rect ? rect.left : anchor.clientX, py = rect ? rect.bottom + 6 : anchor.clientY;
   const w = m.offsetWidth, h = m.offsetHeight;
-  m.style.left = Math.min(e.clientX, innerWidth - w - 8) + "px";
-  m.style.top = Math.min(e.clientY, innerHeight - h - 8) + "px";
+  m.style.left = Math.min(px, innerWidth - w - 8) + "px";
+  m.style.top = Math.min(py, innerHeight - h - 8) + "px";
 }
 
 function toggleFolder(div, c, col){
@@ -1070,6 +1087,8 @@ function render(){
       if (state.presSort && Object.keys(PRES).length)
         clusters = [...clusters].sort((x, y) =>
           (scoreOf(PRES[Q[y.top]]) ?? -1) - (scoreOf(PRES[Q[x.top]]) ?? -1));
+      const pf = parsePresF(state.presFilter);
+      if (pf) clusters = clusters.filter(c => testPres(PRES[Q[c.top]], pf));
       if (isOther && ovMap){
         clusters = clusters.filter(c => ovMap.has(c.label));
         clusters.sort((x, y) => (ovMap.get(y.label)) - (ovMap.get(x.label)));
@@ -1269,7 +1288,7 @@ function savePrefs(){ dbSet("sem_prefs:" + (PID || "demo"),
    targetGeo: state.targetGeo, mode: state.mode,
    anOn: state.anOn, anQ: state.anQ, cmpTpls: state.cmpTpls,
    minusWords: state.minusWords, searchOnly: state.searchOnly,
-   presSort: state.presSort,
+   presSort: state.presSort, presFilter: state.presFilter,
    fMode: state.fMode, fMin: state.fMin, fMetric: state.fMetric}); }
 
 // ---------- шаблоны фильтров ----------
@@ -1356,7 +1375,20 @@ function loadXLSX(){
 }
 
 async function exportSlice(){
-  const {vkey, clusters} = await sliceClusters();
+  const {vkey, clusters: allClusters} = await sliceClusters();
+  const pf = parsePresF(state.presFilter);
+  const clusters = pf
+    ? allClusters.filter(c => c.idxs.length < state.minSize || testPres(PRES[Q[c.top]], pf))
+    : allClusters;
+  // все поля оценок → колонки листа «Маркеры»
+  const presKeys = [];
+  {
+    const seen = new Set();
+    for (const v of Object.values(PRES))
+      if (v && typeof v === "object")
+        for (const k of Object.keys(v))
+          if (!seen.has(k) && presKeys.length < 8){ seen.add(k); presKeys.push(k); }
+  }
   const lines = [["Запрос", "Частотность (Σ группы дублей)", "Базовая (Σ)", "Дубли",
                   "Топоним", "Вопрос", "Интент", "Кластер", "Маркерный запрос",
                   "Интент кластера", "Риск смешения"]];
@@ -1369,7 +1401,11 @@ async function exportSlice(){
     ncl++;
     const name = Q[c.top];
     markers.push([name, c.sum, c.idxs.length, c.dom || "",
-                  PRES[name] !== undefined ? (scoreOf(PRES[name]) ?? JSON.stringify(PRES[name]).slice(0, 100)) : ""]);
+                  ...presKeys.map(k => {
+                    const v = PRES[name] ? PRES[name][k] : undefined;
+                    if (v === undefined || v === null) return "";
+                    return typeof v === "object" ? JSON.stringify(v) : v;
+                  })]);
     for (const i of [...c.idxs].sort((x, y) => F[y] - F[x])){
       lines.push([Q[i], F[i], B[i], (D && D[i] ? D[i].join(" | ") : ""),
                   (G && G[i]) || "", (W && W[i]) ? "да" : "",
@@ -1414,13 +1450,15 @@ async function exportSlice(){
   }
   XLSX.utils.book_append_sheet(wb, ws1, "Кластеры");
 
+  const mCols = 4 + presKeys.length;
   const ws2 = XLSX.utils.aoa_to_sheet(
-    [["Маркерный запрос", "Σ частотность", "Фраз", "Интент кластера", "Оценка промта"], ...markers]);
-  ws2["!cols"] = [{wch: 52}, {wch: 15}, {wch: 9}, {wch: 24}, {wch: 16}];
+    [["Маркерный запрос", "Σ частотность", "Фраз", "Интент кластера", ...presKeys], ...markers]);
+  ws2["!cols"] = [{wch: 52}, {wch: 15}, {wch: 9}, {wch: 24},
+                  ...presKeys.map(() => ({wch: 18}))];
   ws2["!rows"] = [{hpt: 30}];
-  ws2["!autofilter"] = {ref: "A1:E" + (markers.length + 1)};
+  ws2["!autofilter"] = {ref: "A1:" + XLSX.utils.encode_col(mCols - 1) + (markers.length + 1)};
   for (let r = 0; r <= markers.length; r++){
-    for (let c = 0; c < 5; c++){
+    for (let c = 0; c < mCols; c++){
       const cell = ws2[XLSX.utils.encode_cell({r, c})];
       if (!cell) continue;
       if (r === 0){ cell.s = {...HDR_S, fill: {patternType: "solid", fgColor: {rgb: "2E9E74"}}}; continue; }
@@ -1450,6 +1488,40 @@ const DEFAULT_PROMPT = {
 [удалено]`,
   schema: `{"score": <0-100>, "tool": "<короткое название инструмента или ->", "why": "<одна фраза почему>"}`
 };
+
+const AUDIT_PROMPT = {
+  name: "Полный аудит (тип + баллы)",
+  prompt: `[удалено — личный промт]
+[удалено]
+[удалено]
+[удалено]
+[удалено]
+[удалено]`,
+  schema: `{"type": "<инструмент|информационный|коммерческий|навигационный|смешанный>", "score_tool": <0-100>, "score_info": <0-100>, "score_comm": <0-100>, "tool": "<название инструмента или ->", "why": "<одна фраза почему>"}`
+};
+
+/* фильтр папок по оценкам: «score_tool>=70», «type=информационный» */
+function parsePresF(s){
+  const m = (s || "").trim().match(/^([a-zа-яё_][\wа-яё_]*)\s*(>=|<=|=|>|<)\s*(.+)$/i);
+  return m ? {f: m[1].toLowerCase(), op: m[2], v: m[3].trim().toLowerCase()} : null;
+}
+function testPres(r, pf){
+  if (!r || typeof r !== "object") return false;
+  let val;
+  for (const [k, v] of Object.entries(r))
+    if (k.toLowerCase() === pf.f){ val = v; break; }
+  if (val === undefined) return false;
+  const num = parseFloat(pf.v);
+  if (!isNaN(num) && typeof val === "number")
+    switch (pf.op){
+      case ">=": return val >= num;
+      case "<=": return val <= num;
+      case ">": return val > num;
+      case "<": return val < num;
+      default: return val === num;
+    }
+  return String(val).toLowerCase().includes(pf.v);
+}
 
 async function runPromptEval(){
   const prompt = $("#prText").value.trim();
@@ -1602,6 +1674,11 @@ async function boot(){
   };
   $("#prRun").onclick = e => { e.preventDefault(); runPromptEval(); };
   $("#presSort").addEventListener("change", e => { state.presSort = e.target.checked; savePrefs(); render(); });
+  let pfT;
+  $("#presF").addEventListener("input", e => {
+    clearTimeout(pfT);
+    pfT = setTimeout(() => { state.presFilter = e.target.value; state.shown = {}; savePrefs(); render(); }, 350);
+  });
   $("#prSel").addEventListener("change", () => {
     const p = PRLIB[+$("#prSel").value];
     if (p){ $("#prText").value = p.prompt; $("#prSchema").value = p.schema || ""; }
@@ -1707,13 +1784,17 @@ async function boot(){
   const rl = await dbGet("sem_rules:" + (PID || "demo"));
   if (rl && Array.isArray(rl.must) && Array.isArray(rl.not)) RULES = rl;
   PRES = (await dbGet("sem_pres:" + (PID || "demo"))) || {};
-  PRLIB = (await dbGet("sem_prompts")) || [DEFAULT_PROMPT];
-  if (!PRLIB.length) PRLIB = [DEFAULT_PROMPT];
+  PRLIB = (await dbGet("sem_prompts")) || [DEFAULT_PROMPT, AUDIT_PROMPT];
+  if (!PRLIB.length) PRLIB = [DEFAULT_PROMPT, AUDIT_PROMPT];
   renderPrLib();
   $("#prText").value = PRLIB[0].prompt;
   $("#prSchema").value = PRLIB[0].schema || "";
   $("#prSel").value = "0";
   if (prefs.presSort){ state.presSort = true; $("#presSort").checked = true; }
+  if (typeof prefs.presFilter === "string"){
+    state.presFilter = prefs.presFilter;
+    $("#presF").value = state.presFilter;
+  }
   if (prefs.anOn){
     state.anOn = true;
     $("#anOn").checked = true;
