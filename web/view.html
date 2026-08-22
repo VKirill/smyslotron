@@ -219,7 +219,9 @@
     </div>
     <div class="grp">
       <label>Поиск по фразам</label>
-      <input type="search" id="search" placeholder="например: аниме">
+      <input type="search" id="search" placeholder="аниме · [под ключ] · !москва">
+      <div class="hint">операторы: <b>[слова]</b> — именно в этом порядке подряд;
+      <b>!</b> в начале — показать НЕ соответствующие фильтру</div>
     </div>
     <div class="grp">
       <label>Режим анализа</label>
@@ -496,11 +498,39 @@ async function getCols(){
 }
 
 function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+/* Поиск с операторами (по мотивам Вордстата):
+   [слова] — фразы, где слова идут подряд именно в этом порядке;
+   !запрос — инверсия: фразы, НЕ соответствующие фильтру (работает и с [ ]). */
+let _mq = {q: null, neg: false, seq: null, txt: ""};
+function _compileQ(q){
+  if (_mq.q === q) return _mq;
+  let neg = false, s = q;
+  if (s.startsWith("!")){ neg = true; s = s.slice(1).trim(); }
+  let seq = null;
+  const m = s.match(/^\[(.*)\]$/);
+  if (m){ seq = m[1].trim().split(/\s+/).filter(Boolean); s = ""; }
+  _mq = {q, neg, seq: seq && seq.length ? seq : null, txt: s};
+  return _mq;
+}
+function hasSeq(text, seq){
+  const w = text.toLowerCase().split(/\s+/);
+  outer: for (let s = 0; s + seq.length <= w.length; s++){
+    for (let j = 0; j < seq.length; j++) if (w[s + j] !== seq[j]) continue outer;
+    return true;
+  }
+  return false;
+}
 function matchQ(i, q){
-  if (Q[i].toLowerCase().includes(q)) return true;
-  return !!(D && D[i] && D[i].some(f => f.toLowerCase().includes(q)));
+  const c = _compileQ(q);
+  if (!c.seq && !c.txt) return true;  // «!» или «[]» без текста — не фильтруем
+  const hit = c.seq
+    ? (hasSeq(Q[i], c.seq) || !!(D && D[i] && D[i].some(f => hasSeq(f, c.seq))))
+    : (Q[i].toLowerCase().includes(c.txt) || !!(D && D[i] && D[i].some(f => f.toLowerCase().includes(c.txt))));
+  return c.neg ? !hit : hit;
 }
 function hi(s, q){
+  if (!q) return esc(s);
+  q = q.replace(/^!/, "").trim().replace(/^\[/, "").replace(/\]$/, "").trim();
   if (!q) return esc(s);
   const i = s.toLowerCase().indexOf(q);
   if (i < 0) return esc(s);
