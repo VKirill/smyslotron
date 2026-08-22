@@ -229,3 +229,6 @@
 
   .folder.linkmark{outline:2px solid var(--accent); outline-offset:-2px}
   .folder.linkmark .fhead::after{content:"🔗"; font-size:11px}
+
+  .evalcnt{color:var(--muted)}
+  .evalcnt.full{color:var(--accent2, #38c793); font-weight:600}

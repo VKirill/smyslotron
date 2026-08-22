@@ -72,9 +72,16 @@ async function runPromptEval(){
   const prompt = $("#prText").value.trim();
   if (!prompt){ alert("Напиши промт"); return; }
   const {clusters} = await sliceClusters();
-  const list = clusters.filter(c => c.idxs.length >= state.minSize).slice(0, 1000);
-  if (!list.length){ alert("В текущем срезе нет сформированных папок"); return; }
-  if (!confirm(`Прогнать промт по ${list.length.toLocaleString("ru-RU")} папкам через DeepSeek?\n«Без группы» и папки меньше мин. размера не участвуют.`)) return;
+  const all = clusters.filter(c => c.idxs.length >= state.minSize);
+  const todo = all.filter(c => PRES[Q[c.top]] === undefined);
+  if (!all.length){ alert("В текущем срезе нет сформированных папок"); return; }
+  let list = todo;
+  if (!todo.length){
+    if (!confirm(`Все ${all.length.toLocaleString("ru-RU")} папок уже оценены. Переоценить заново (старые оценки перезапишутся)?`)) return;
+    list = all;
+  } else if (todo.length < all.length){
+    if (!confirm(`Оценено ${(all.length - todo.length).toLocaleString("ru-RU")} из ${all.length.toLocaleString("ru-RU")} папок. Дооценить оставшиеся ${todo.length.toLocaleString("ru-RU")}?\n(Отмена — ничего не делать)`)) return;
+  } else if (!confirm(`Прогнать промт по ${list.length.toLocaleString("ru-RU")} папкам через DeepSeek?\n«Без группы» и папки меньше мин. размера не участвуют.`)) return;
   const schema = $("#prSchema").value.trim();
   const items = list.map((c, k) => ({id: k,
     text: [...c.idxs].sort((x, y) => F[y] - F[x]).slice(0, 10).map(i => Q[i]).join("; ")}));

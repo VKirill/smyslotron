@@ -79,7 +79,11 @@ function render(){
       // счёт папок «один к одному»: мелкие группы из «Без группы» — тоже папки
       const nSmallF = q ? small.filter(cc => cc.idxs.some(i => matchQ(i, q))).length : small.length;
       const nFolders = clusters.length + nSmallF;
-      const cntHtml = `<span title="Сформированных кластеров (≥ мин. размера); в «Без группы» ещё ${fmt(nSmallF)} одиночек">${fmt(clusters.length)} кластеров</span>
+      const nEval = clusters.filter(c => PRES[Q[c.top]] !== undefined).length;
+      const evalHtml = Object.keys(PRES).length
+        ? ` · <span class="evalcnt${nEval === clusters.length ? " full" : ""}" title="${nEval === clusters.length ? "Все показанные папки оценены промтом" : `Оценено ${fmt(nEval)} из ${fmt(clusters.length)} показанных папок — остальные можно дооценить кнопкой ▶ на табе «Промты» (оцениваются только неоценённые)`}">⚙ ${fmt(nEval)}/${fmt(clusters.length)}</span>`
+        : "";
+      const cntHtml = `<span title="Сформированных кластеров (≥ мин. размера); в «Без группы» ещё ${fmt(nSmallF)} одиночек">${fmt(clusters.length)} кластеров</span>${evalHtml}
         <button class="copy colcopy" title="Скопировать уникальные фразы всех показанных папок колонки (без дублей и «Без группы»)">⧉</button>` +
         (q ? `<button class="copy coltrash" title="Отправить в корзину ВСЕ фразы проекта, найденные этим фильтром — они выпадут из кластеризации">🗑</button>` : "") +
         `<button class="copy colmove" title="Перенести фразы показанных папок в другой проект (существующий или новый) — здесь они уйдут в корзину, ничего не теряется">📤</button>`;
