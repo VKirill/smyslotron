@@ -155,6 +155,8 @@
     text-decoration:none; line-height:1}
   .se a.ya{color:#fc3f1d}
   .se a.go{color:#4285f4}
+  .se a.tr{color:var(--muted); font-size:9.5px; cursor:pointer}
+  .se a.tr:hover{color:var(--err, #e05d5d); border-color:currentColor}
   .se a:hover{border-color:currentColor}
   .dup{color:var(--accent2); font-size:11.5px; cursor:help}
   .dup.hit{background:var(--hl); border-radius:4px; padding:0 4px}
@@ -236,8 +238,9 @@
       <input type="search" id="search" placeholder='[под ключ] · "купить слона" · !москве · !!аренда'>
       <div class="hint">операторы как в Вордстате: <b>[слова]</b> — подряд и в этом
       порядке; <b>"слова"</b> — фраза ровно из этих слов; <b>!слово</b> — ровно такая
-      форма (работает и внутри скобок/кавычек); <b>!!</b> в начале — показать НЕ
-      соответствующие; <b>/регэксп/</b> — регулярное выражение (флаги после второго
+      форма (работает и внутри скобок/кавычек); <b>!!</b> в начале (или <b>!</b> перед
+      [ ], " ", / /) — показать НЕ соответствующие; <b>/регэксп/</b> — регулярное
+      выражение (флаги после второго
       слэша, по умолчанию регистронезависимо). Без «!» слово ищется в любой форме
       (по леммам)</div>
     </div>
@@ -274,6 +277,20 @@
       <datalist id="geoList"></datalist>
       <div class="hint">синонимы региона через запятую: их слова вычитаются из гео фразы —
       «дома под ключ в москве и мо» склеится с «дома под ключ», а Казань останется отдельно</div>
+    </div>
+    <div class="grp">
+      <label>Минус-слова</label>
+      <input type="search" id="minusW" placeholder="кухня, спальня, б/у">
+      <div class="hint">через запятую; фразы с этими словами <b>в любой форме</b>
+      (по леммам: «кухня» поймает и «кухни», и «кухней») полностью убираются из
+      кластеризации. Исключено фраз: <b id="minusCnt">0</b></div>
+    </div>
+    <div class="grp">
+      <label>Корзина <span id="trashCnt" style="color:var(--muted)"></span>
+        <button class="link" id="trashClear" style="float:right">вернуть всё</button></label>
+      <div class="hint">фразы из корзины не участвуют в кластеризации; 🗑 у фразы —
+      убрать, клик по фразе ниже — вернуть</div>
+      <div id="trashList" style="max-height:180px; overflow-y:auto; font-size:12.5px; margin-top:6px"></div>
     </div>
     </div><!-- /pane-filters -->
     <div class="tabpane" id="pane-tpls">
@@ -384,6 +401,7 @@ const TREES = {};                    // "openai_hard" -> {a,b,d}
 const state = {cols: ["openai"], mode: "hard",
                slider: 8200, minSize: 2, search: "",
                fMode: "off", fMin: 10, fMetric: "f",   // фильтр по частотности: off|hide|nogroup
+               minusWords: [],       // минус-слова: фразы с ними (в любой форме) вне кластеризации
                anOn: false, anQ: [""], anFocus: null,  // режим анализа: столбцы-поиски
                cmpTpls: [],          // имена шаблонов, включённых в сравнение колонками
                targetGeo: "",        // целевой регион: его гео = «без гео»
@@ -426,9 +444,23 @@ function cutLabels(tree, k){
   return lab;
 }
 
+/* ---------- корзина и минус-слова: полное исключение из кластеризации ---------- */
+let TRASH = new Set();  // тексты фраз в корзине (persist: sem_trash:<pid>)
+function saveTrash(){ dbSet("sem_trash:" + (PID || "demo"), [...TRASH]); }
+function minusHit(i){
+  if (!state.minusWords.length) return false;
+  const raw = Q[i].toLowerCase().split(/\s+/);
+  const lem = L && L[i] ? L[i].split(/\s+/) : null;
+  for (const w of state.minusWords)
+    if (raw.includes(w) || (lem && lem.includes(w))) return true;
+  return false;
+}
+function excluded(i){ return TRASH.has(Q[i]) || minusHit(i); }
+
 function clusterize(lab){
   const map = new Map();
   for (let i = 0; i < N; i++){
+    if (excluded(i)) continue;
     if (state.fMode !== "off" && (state.fMetric === "b" ? B[i] : F[i]) < state.fMin){
       if (state.fMode === "hide") continue;
       map.set("f" + i, [i]);  // «в Без группы»: одиночка уйдёт под мин. размер папки
@@ -536,7 +568,7 @@ let _mq = {q: null};
 // нормализация запроса: обычные — в нижний регистр, /регэкспы/ — как есть
 function normQ(s){
   s = (s || "").trim();
-  return /^(!!)?\/.+\/[a-z]*$/i.test(s) ? s : s.toLowerCase();
+  return /^(!!?)?\/.+\/[a-z]*$/i.test(s) ? s : s.toLowerCase();
 }
 function _tokenize(s){
   // [{w, ex}] — слово + флаг «точная форма»
@@ -548,6 +580,7 @@ function _compileQ(q){
   if (_mq.q === q) return _mq;
   let neg = false, s = q;
   if (s.startsWith("!!")){ neg = true; s = s.slice(2).trim(); }
+  else if (/^!\s*[\["«\/]/.test(s)){ neg = true; s = s.slice(1).trim(); }  // ![...] / !"..." / !/re/ — тоже инверсия
   let seq = null, quote = null, exact = null, subs = null, txt = "", re = null;
   let m;
   if ((m = s.match(/^\/(.+)\/([a-z]*)$/))){
@@ -606,7 +639,7 @@ function matchQ(i, q){
 }
 function hi(s, q){
   if (!q) return esc(s);
-  const rm = q.replace(/^!!/, "").match(/^\/(.+)\/([a-z]*)$/);
+  const rm = q.replace(/^!!?/, "").match(/^\/(.+)\/([a-z]*)$/);
   if (rm){
     try{
       const mm = s.match(new RegExp(rm[1], rm[2] || "i"));
@@ -616,8 +649,8 @@ function hi(s, q){
     }catch(err){}
     return esc(s);
   }
-  q = q.replace(/^!!/, "").trim().replace(/^[\["«]/, "").replace(/[\]"»]$/, "")
-       .replace(/(^|\s)!(\S)/g, "$1$2").trim();
+  q = q.replace(/^!!?(?=[\["«])/, "").trim().replace(/^[\["«]/, "").replace(/[\]"»]$/, "")
+       .replace(/^!!/, "").replace(/(^|\s)!(\S)/g, "$1$2").trim();
   if (!q) return esc(s);
   const i = s.toLowerCase().indexOf(q);
   if (i < 0) return esc(s);
@@ -704,9 +737,16 @@ function expandInto(div, c, onlyMatches, colQ){
       ? `<span class="pint ${INT_CLS[INT[i]] || ""}" title="${esc(INT[i])}">${INT_SHORT[INT[i]] || "?"}</span> ` : "";
     const mk = (W && W[i] ? " ❓" : "") + (G && G[i] ? " 📍" : "");
     const eq = encodeURIComponent(Q[i]);
-    const se = `<span class="se"><a class="ya" href="https://yandex.ru/search/?text=${eq}" target="_blank" rel="noopener" title="Выдача Яндекса">Я</a><a class="go" href="https://www.google.com/search?q=${eq}" target="_blank" rel="noopener" title="Выдача Google">G</a></span>`;
+    const se = `<span class="se"><a class="ya" href="https://yandex.ru/search/?text=${eq}" target="_blank" rel="noopener" title="Выдача Яндекса">Я</a><a class="go" href="https://www.google.com/search?q=${eq}" target="_blank" rel="noopener" title="Выдача Google">G</a><a class="tr" data-i="${i}" title="В корзину — исключить из кластеризации">🗑</a></span>`;
     return `<div class="q"><span class="qt">${ib}${hi(Q[i], q)}${mk}${dd}</span>${se}<span class="qf">${fmt(F[i])}</span></div>`;
   }).join("") + (sorted.length > CAP ? `<div class="q"><span class="qt" style="color:var(--muted)">… ещё ${fmt(sorted.length - CAP)}</span></div>` : "");
+  ql.addEventListener("click", e => {
+    const tr = e.target.closest(".tr");
+    if (!tr) return;
+    e.preventDefault(); e.stopPropagation();
+    TRASH.add(Q[+tr.dataset.i]);
+    saveTrash(); render();
+  });
   div.appendChild(ql);
 }
 
@@ -779,7 +819,8 @@ function render(){
       const nSmallF = q ? small.filter(cc => cc.idxs.some(i => matchQ(i, q))).length : small.length;
       const nFolders = clusters.length + nSmallF;
       const cntHtml = `<span title="${fmt(clusters.length)} групп + ${fmt(nSmallF)} в «Без группы»">${fmt(nFolders)} папок</span>
-        <button class="copy colcopy" title="Скопировать уникальные фразы всех показанных папок колонки (без дублей и «Без группы»)">⧉</button>`;
+        <button class="copy colcopy" title="Скопировать уникальные фразы всех показанных папок колонки (без дублей и «Без группы»)">⧉</button>` +
+        (q ? `<button class="copy coltrash" title="Отправить в корзину ВСЕ фразы проекта, найденные этим фильтром — они выпадут из кластеризации">🗑</button>` : "");
 
       const head = document.createElement("div");
       head.className = "colhead";
@@ -817,6 +858,17 @@ function render(){
           <span>${isOther && ovMap ? `${fmt(clusters.length)} папок с общими фразами` : cntHtml}
           ${isAB() && state.sel && col.prov === state.sel.col ? ` · <button class="link" id="resetSel">сбросить выбор</button>` : ""}</span>`;
       }
+      const ctb = head.querySelector(".coltrash");
+      if (ctb) ctb.onclick = e => {
+        e.stopPropagation();
+        const hits = [];
+        for (let i = 0; i < N; i++)
+          if (!excluded(i) && matchQ(i, q)) hits.push(i);
+        if (!hits.length){ alert("По этому фильтру ничего не найдено"); return; }
+        if (!confirm(`Отправить в корзину ${hits.length.toLocaleString("ru-RU")} фраз, найденных фильтром «${q}»?\n\nОни перестанут участвовать в кластеризации; вернуть можно из корзины на табе «Фильтры».`)) return;
+        for (const i of hits) TRASH.add(Q[i]);
+        saveTrash(); render();
+      };
       const ccb = head.querySelector(".colcopy");
       if (ccb) ccb.onclick = async e => {
         e.stopPropagation();
@@ -897,7 +949,22 @@ function render(){
       <span>Слияний применено</span><span>${fmt(c0.k)} / ${fmt(N - 1)}</span>`;
     // зелёная точка на табе «Фильтры», если хоть один фильтр активен
     $("#tabFilters").classList.toggle("dot",
-      !!(state.search.trim() || state.fMode !== "off" || state.targetGeo.trim() || state.anOn));
+      !!(state.search.trim() || state.fMode !== "off" || state.targetGeo.trim() ||
+         state.anOn || state.minusWords.length || TRASH.size));
+    // счётчики минус-слов и корзины + список корзины
+    let mc = 0;
+    if (state.minusWords.length) for (let i = 0; i < N; i++) if (minusHit(i)) mc++;
+    $("#minusCnt").textContent = fmt(mc);
+    $("#trashCnt").textContent = TRASH.size ? `— ${fmt(TRASH.size)} фраз` : "— пусто";
+    const tl = $("#trashList");
+    if (tl){
+      const items = [...TRASH].slice(0, 200);
+      tl.innerHTML = items.map(t => `<div class="q" style="cursor:pointer" title="Вернуть из корзины">↩ ${esc(t)}</div>`).join("") +
+        (TRASH.size > 200 ? `<div class="q" style="color:var(--muted)">… ещё ${fmt(TRASH.size - 200)}</div>` : "");
+      [...tl.children].forEach((el, k) => {
+        if (k < items.length) el.onclick = () => { TRASH.delete(items[k]); saveTrash(); render(); };
+      });
+    }
     renderTpls();
   });
 }
@@ -938,7 +1005,8 @@ async function loadPrefs(){
 function savePrefs(){ dbSet("sem_prefs:" + (PID || "demo"),
   {view: state.cols, search: state.search, sliders: state.sliders,
    targetGeo: state.targetGeo, mode: state.mode,
-   anOn: state.anOn, anQ: state.anQ, cmpTpls: state.cmpTpls}); }
+   anOn: state.anOn, anQ: state.anQ, cmpTpls: state.cmpTpls,
+   minusWords: state.minusWords}); }
 
 // ---------- шаблоны фильтров ----------
 let TPLS = [];                       // загружаются в boot() из БД
@@ -1202,6 +1270,20 @@ async function boot(){
     state.anFocus = state.anQ.length - 1;
     savePrefs(); render();
   };
+  let mwT;
+  $("#minusW").addEventListener("input", e => {
+    clearTimeout(mwT);
+    mwT = setTimeout(() => {
+      state.minusWords = e.target.value.toLowerCase().split(",").map(w => w.trim()).filter(Boolean);
+      state.sel = null; state.shown = {};
+      savePrefs(); render();
+    }, 350);
+  });
+  $("#trashClear").onclick = () => {
+    if (!TRASH.size) return;
+    if (!confirm(`Вернуть все ${TRASH.size.toLocaleString("ru-RU")} фраз из корзины в кластеризацию?`)) return;
+    TRASH.clear(); saveTrash(); render();
+  };
   $("#fMode").addEventListener("change", () => { state.fMode = $("#fMode").value; state.sel = null; state.shown = {}; render(); });
   $("#fMin").addEventListener("input", e => { state.fMin = Math.max(0, +e.target.value || 0); if (state.fMode !== "off"){ state.sel = null; render(); } });
   $("#fMetric").addEventListener("change", () => { state.fMetric = $("#fMetric").value; if (state.fMode !== "off"){ state.sel = null; render(); } });
@@ -1237,6 +1319,11 @@ async function boot(){
   if (Array.isArray(prefs.anQ) && prefs.anQ.length) state.anQ = prefs.anQ.map(String);
   if (Array.isArray(prefs.cmpTpls))
     state.cmpTpls = prefs.cmpTpls.filter(n => TPLS.some(t => t.name === n));
+  if (Array.isArray(prefs.minusWords)){
+    state.minusWords = prefs.minusWords.map(String);
+    $("#minusW").value = state.minusWords.join(", ");
+  }
+  TRASH = new Set((await dbGet("sem_trash:" + (PID || "demo"))) || []);
   if (prefs.anOn){
     state.anOn = true;
     $("#anOn").checked = true;
