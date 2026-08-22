@@ -449,16 +449,17 @@ function cmpTpls(){ return TPLS.filter(t => state.cmpTpls.includes(t.name)); }
 async function getCols(){
   const cmp = cmpTpls();
   if (cmp.length){
-    // сравнение шаблонов: колонка = шаблон со СВОИМИ вариантом/режимом/срезом/поиском
+    // сравнение шаблонов: колонка = шаблон со СВОИМИ вариантом/режимом/срезом.
+    // Поиск, зашитый в шаблон, не применяем (он «прячет» папки в чужом проекте),
+    // а вот общий «Поиск по фразам» из сайдбара действует на все колонки
+    const gq = state.search.trim().toLowerCase();
     const cols = [];
     for (const [ci, t] of cmp.entries()){
       const p = (t.cols || []).find(x => META.provs.includes(x)) || META.provs[0];
       const tree = await loadTree(p + "_" + t.mode);
       const k = kFromSlider(t.slider);
       const lab = cutLabels(tree, k);
-      // сохранённый в шаблоне поиск НЕ применяем: колонка сравнения показывает
-      // полную кластеризацию, иначе чужой поиск из шаблона «прячет» все папки
-      cols.push({prov: p, tree, k, clusters: clusterize(lab), lab, q: "",
+      cols.push({prov: p, tree, k, clusters: clusterize(lab), lab, q: gq,
                  key: "t#" + ci, tpl: t, minSize: t.minSize || 1});
     }
     return cols;
