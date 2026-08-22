@@ -83,6 +83,11 @@ async function runPromptEval(){
   let done = 0, failed = 0;
   const batches = [];
   for (let i = 0; i < items.length; i += 20) batches.push(items.slice(i, i + 20));
+  let saveT = null;
+  const saveSoon = () => {  // промежуточное сохранение: обновление страницы ничего не теряет
+    clearTimeout(saveT);
+    saveT = setTimeout(() => dbSet("sem_pres:" + (PID || "demo"), PRES), 1500);
+  };
   const runBatch = async b => {
     try{
       const r = await fetch("api/prompt_eval", {method: "POST", credentials: "same-origin",
@@ -98,13 +103,17 @@ async function runPromptEval(){
       }
       usage.in += d.usage?.prompt_tokens || 0;
       usage.out += d.usage?.completion_tokens || 0;
+      saveSoon();
     }catch(e){ failed++; }
     done++;
     prog.textContent = `Оценка: ${Math.min(done * 20, items.length)} / ${items.length} папок…`;
   };
-  // конкурентность 5 батчей
-  for (let i = 0; i < batches.length; i += 5)
-    await Promise.all(batches.slice(i, i + 5).map(runBatch));
+  // семафор: до 500 одновременных запросов (лимит DeepSeek — 2500 соединений)
+  const LIMIT = 500;
+  let idx = 0;
+  const worker = async () => { while (idx < batches.length) await runBatch(batches[idx++]); };
+  await Promise.all(Array.from({length: Math.min(LIMIT, batches.length)}, worker));
+  clearTimeout(saveT);
   dbSet("sem_pres:" + (PID || "demo"), PRES);
   const usd = (usage.in * 0.28 + usage.out * 0.42) / 1e6;
   prog.textContent = `Готово: оценено ${Object.keys(PRES).length} папок · ~$${usd.toFixed(3)}${failed ? ` · ошибок батчей: ${failed}` : ""}`;

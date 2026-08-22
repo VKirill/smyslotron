@@ -11,13 +11,24 @@ from .worker import pipeline_env
 
 router = APIRouter(prefix=P)
 
+# общий пул на все параллельные оценки: лимит DeepSeek — 2500 соединений
+_client = None
+
+
+def client():
+    global _client
+    if _client is None:
+        import httpx
+        _client = httpx.AsyncClient(
+            timeout=240, limits=httpx.Limits(max_connections=1600, max_keepalive_connections=300))
+    return _client
+
 
 @router.post("/prompt_eval")
 async def prompt_eval(request: Request, user: sqlite3.Row = Depends(current_user)):
     """Прогон пользовательского промта по батчу групп запросов через DeepSeek.
     Вход: {prompt, schema?, items: [{id, text}]} (до 40 items за вызов).
     Выход: {items: [{id, ...поля схемы}], usage: {...}}."""
-    import httpx
     body = await request.json()
     prompt = str(body.get("prompt") or "").strip()[:4000]
     schema = str(body.get("schema") or "").strip()[:2000]
@@ -44,9 +55,8 @@ async def prompt_eval(request: Request, user: sqlite3.Row = Depends(current_user
         payload["reasoning_effort"] = env.get("DEEPSEEK_EFFORT", "high")
     else:
         payload["thinking"] = {"type": "disabled"}
-    async with httpx.AsyncClient(timeout=240) as client:
-        r = await client.post("https://api.deepseek.com/chat/completions",
-                              headers={"Authorization": f"Bearer {key}"}, json=payload)
+    r = await client().post("https://api.deepseek.com/chat/completions",
+                            headers={"Authorization": f"Bearer {key}"}, json=payload)
     d = r.json()
     if r.status_code != 200:
         raise HTTPException(502, f"DeepSeek: {d.get('error', {}).get('message', r.status_code)}")
