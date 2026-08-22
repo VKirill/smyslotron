@@ -258,20 +258,12 @@ async function startUpload(files, appendPid){
       const fd = new FormData();
       fd.append("file", f);
       const up = await api("uploads", {method: "POST", body: fd});
-      if (appendPid && up.template && up.query_col >= 0){
-        // формат уже знаком — добавляем сразу, без маппера
-        const r = await api(`projects/${appendPid}/append`,
-          {method: "POST", headers: {"Content-Type": "application/json"},
-           body: JSON.stringify({...upMapping(up), defer_run: true})});
-        results.push(`${f.name}: +${r.added.toLocaleString("ru-RU")} новых, дублей ${r.merged.toLocaleString("ru-RU")} — формат узнан автоматически`);
-        okCount++;
-        loading(false);
-      } else {
-        loading(false);
-        const res = await new Promise(done => openMapper(up, appendPid || null, done));
-        if (res === null) break;               // отмена — прерываем очередь
-        if (res){ results.push(`${f.name}: ${res}`); okCount++; }
-      }
+      loading(false);
+      // окно подтверждения показывается ВСЕГДА, даже для знакомого формата —
+      // шаблон только подставляет колонки, решение за пользователем
+      const res = await new Promise(done => openMapper(up, appendPid || null, done));
+      if (res === null) break;                 // отмена — прерываем очередь
+      if (res){ results.push(`${f.name}: ${res}`); okCount++; }
     }catch(e){ loading(false); results.push(`${f.name}: ошибка — ${e.message}`); }
   }
   if (appendPid && (results.length || okCount)){
@@ -291,7 +283,7 @@ function openMapper(up, appendPid, done){
                query: up.query_col, base: up.base_col, exact: up.exact_col,
                vexact: up.vexact_col ?? -1, topo: up.topo_col ?? -1, ques: up.ques_col ?? -1};
   m.innerHTML = `<div class="mbox">
-    <h2>${appendPid ? "Докинуть фразы в проект" : "Настрой файл под систему"}</h2>
+    <h2>${appendPid ? `Докинуть фразы: ${esc(up.name)}` : "Настрой файл под систему"}</h2>
     ${up.template ? `<div style="color:var(--accent2); font-size:12.5px; margin:-8px 0 10px">✓ Формат файла узнан по прошлым загрузкам — колонки подставлены автоматически, проверь и подтверди</div>` : ""}
     <div class="mrow">
       <div class="fld"><label>Название проекта</label><input id="mName" value="${esc(up.name)}"></div>
