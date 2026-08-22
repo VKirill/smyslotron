@@ -14,3 +14,6 @@ __pycache__/
 
 # gitnexus index
 .gitnexus/
+
+# глобальная база эмбеддингов
+embeddings.db*

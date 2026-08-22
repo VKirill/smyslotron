@@ -8,7 +8,7 @@ import time
 import httpx
 import numpy as np
 
-from . import ctx
+from . import ctx, store
 from .config import COMPAT_API, DERIVED, GEMINI_TASK, INTENT_PREFIX, PRICE, TITLES
 from .ctx import set_status
 
@@ -144,6 +144,17 @@ class EmbStore:
         return self.qs
 
     async def _embed(self, key: str, texts: list[str]) -> np.ndarray:
+        # сначала глобальная база: платим только за фразы, невиданные НИ В ОДНОМ проекте
+        cached, missing = store.fetch(key, texts)
+        if missing:
+            miss_texts = [texts[i] for i in missing]
+            m_new = await self._embed_api(key, miss_texts)
+            for j, i in enumerate(missing):
+                cached[i] = np.asarray(m_new[j], dtype=np.float32)
+            store.put(key, miss_texts, m_new)
+        return np.vstack([cached[i] for i in range(len(texts))])
+
+    async def _embed_api(self, key: str, texts: list[str]) -> np.ndarray:
         if key in COMPAT_API:
             url, envk, model, batch, extra, vendor = COMPAT_API[key]
             m, tok = await embed_compat(texts, url, os.environ[envk], model, batch, extra)
