@@ -22,6 +22,7 @@ seo-cluster (fallback-ключи) → локальный `.env` (приорит�
 | `DEEPSEEK_API_KEY` | интенты |
 | `GEMINI_RPM` | лимит запросов/мин для Gemini (дефолт 15000) |
 | `DEEPSEEK_MODEL` / `DEEPSEEK_REASONING` / `DEEPSEEK_EFFORT` / `DEEPSEEK_TEMP` | модель и ризонинг DeepSeek |
+| `VASTAI_API_KEY` / `VASTAI_MAX_DPH` / `VASTAI_SSH_KEY` | автоаренда RAM-машины для HAC, потолок $/час, путь к приватному ключу (дефолт `~/.ssh/id_ed25519`; публичный должен быть в аккаунте Vast.ai) |
 
 ## Обновление
 
@@ -46,6 +47,6 @@ pm2 logs semantika-web --lines 30 --nostream                   # логи
 
 ## Бэкап
 
-Достаточно `semantika.db*` + `projects/` + `.env`. Деревья/эмбеддинги
+Достаточно `semantika.db*` + `embeddings.db*` (глобальная база эмбеддингов — самое дорогое) + `projects/` + `.env`. Деревья/эмбеддинги
 восстанавливаются перезапуском пайплайна (эмбеддинги — платно, поэтому `emb_*.npy`
 лучше бэкапить тоже).
