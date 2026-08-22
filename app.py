@@ -58,6 +58,9 @@ def init_db() -> None:
         CREATE TABLE IF NOT EXISTS mapping_templates(
             sig TEXT PRIMARY KEY, mapping TEXT NOT NULL,
             uses INTEGER DEFAULT 1, updated TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS user_prefs(
+            user_id INTEGER NOT NULL, key TEXT NOT NULL, value TEXT NOT NULL,
+            updated TEXT NOT NULL, PRIMARY KEY(user_id, key));
         CREATE TABLE IF NOT EXISTS projects(
             id TEXT PRIMARY KEY, user_id INTEGER NOT NULL, name TEXT NOT NULL,
             status TEXT NOT NULL, task TEXT DEFAULT '',
@@ -172,6 +175,36 @@ async def logout(request: Request, resp: Response):
 @app.get(P + "/auth/me")
 async def me(user: sqlite3.Row = Depends(current_user)):
     return {"email": user["email"]}
+
+# ---------------------------------------------------------------- prefs (KV на пользователя)
+
+PREF_KEY_RE = re.compile(r"^[a-zA-Z0-9_:.\-]{1,80}$")
+
+
+@app.get(P + "/prefs/{key}")
+async def get_pref(key: str, user: sqlite3.Row = Depends(current_user)):
+    if not PREF_KEY_RE.fullmatch(key):
+        raise HTTPException(400, "Некорректный ключ")
+    with db() as c:
+        row = c.execute("SELECT value FROM user_prefs WHERE user_id=? AND key=?",
+                        (user["id"], key)).fetchone()
+    return {"value": json.loads(row["value"]) if row else None}
+
+
+@app.post(P + "/prefs/{key}")
+async def set_pref(key: str, request: Request, user: sqlite3.Row = Depends(current_user)):
+    if not PREF_KEY_RE.fullmatch(key):
+        raise HTTPException(400, "Некорректный ключ")
+    body = await request.json()
+    value = json.dumps(body.get("value"), ensure_ascii=False)
+    if len(value) > 100_000:
+        raise HTTPException(400, "Слишком большое значение")
+    with db() as c:
+        c.execute("INSERT INTO user_prefs(user_id,key,value,updated) VALUES(?,?,?,?) "
+                  "ON CONFLICT(user_id,key) DO UPDATE SET value=excluded.value, "
+                  "updated=excluded.updated",
+                  (user["id"], key, value, time.strftime("%F %T")))
+    return {"ok": True}
 
 # ---------------------------------------------------------------- upload + mapper
 

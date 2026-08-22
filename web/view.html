@@ -668,20 +668,46 @@ function render(){
 }
 
 function viewKey(){ return state.cols.join("+"); }
-function loadPrefs(){ try{ const pr = JSON.parse(localStorage.getItem("sem_prefs:" + (PID || "demo")) || "{}");
-  if (pr.sliders) for (const k in pr.sliders) if (pr.sliders[k] <= 1000) pr.sliders[k] *= 10;
-  return pr; }catch(e){ return {}; } }
-function savePrefs(){ try{ localStorage.setItem("sem_prefs:" + (PID || "demo"), JSON.stringify(
-  {view: state.cols, search: state.search, sliders: state.sliders,
-   targetGeo: state.targetGeo, mode: state.mode})); }catch(e){} }
 
-// ---------- шаблоны фильтров (localStorage) ----------
-function loadTpls(){ try{ const t = JSON.parse(localStorage.getItem("sem_tpl") || "[]");
-  t.forEach(x => {
-    if (x.slider <= 1000) x.slider *= 10;
-    if (!x.cols) x.cols = x.ab ? ["openai", "gemini"] : [x.provider || "openai"];
-  }); return t; }catch(e){ return []; } }
-function saveTpls(t){ try{ localStorage.setItem("sem_tpl", JSON.stringify(t)); }catch(e){} }
+/* ---------- настройки и шаблоны: хранятся в БД на пользователя,
+   localStorage — офлайн-фолбэк и источник миграции старых данных ---------- */
+const _pTimers = {};
+function dbSet(key, value){
+  try{ localStorage.setItem(key, JSON.stringify(value)); }catch(e){}
+  clearTimeout(_pTimers[key]);
+  _pTimers[key] = setTimeout(() => {
+    fetch("api/prefs/" + encodeURIComponent(key),
+      {method: "POST", credentials: "same-origin",
+       headers: {"Content-Type": "application/json"},
+       body: JSON.stringify({value})}).catch(() => {});
+  }, 400);
+}
+async function dbGet(key){
+  let v = null;
+  try{
+    const r = await fetch("api/prefs/" + encodeURIComponent(key), {credentials: "same-origin"});
+    if (r.ok) v = (await r.json()).value;
+  }catch(e){}
+  if (v === null){
+    try{ v = JSON.parse(localStorage.getItem(key)); }catch(e){ v = null; }
+    if (v) dbSet(key, v);  // миграция старых localStorage-настроек в БД
+  }
+  return v;
+}
+
+async function loadPrefs(){
+  const pr = (await dbGet("sem_prefs:" + (PID || "demo"))) || {};
+  if (pr.sliders) for (const k in pr.sliders) if (pr.sliders[k] <= 1000) pr.sliders[k] *= 10;
+  return pr;
+}
+function savePrefs(){ dbSet("sem_prefs:" + (PID || "demo"),
+  {view: state.cols, search: state.search, sliders: state.sliders,
+   targetGeo: state.targetGeo, mode: state.mode}); }
+
+// ---------- шаблоны фильтров ----------
+let TPLS = [];                       // загружаются в boot() из БД
+function loadTpls(){ return TPLS; }
+function saveTpls(t){ TPLS = t; dbSet("sem_tpl", t); }
 const MODE_NAME = {hard: "Hard", avg: "Средний", soft: "Soft"};
 
 function tplLabel(t){
@@ -864,7 +890,12 @@ async function boot(){
     }
   });
 
-  const prefs = loadPrefs();
+  const prefs = await loadPrefs();
+  TPLS = (await dbGet("sem_tpl")) || [];
+  TPLS.forEach(x => {
+    if (x.slider <= 1000) x.slider *= 10;
+    if (!x.cols) x.cols = x.ab ? ["openai", "gemini"] : [x.provider || "openai"];
+  });
   state.sliders = prefs.sliders || {};
   if (typeof prefs.search === "string") state.search = prefs.search;
   if (typeof prefs.targetGeo === "string") state.targetGeo = prefs.targetGeo;
