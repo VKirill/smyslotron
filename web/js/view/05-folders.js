@@ -2,6 +2,7 @@
 function folderEl(c, col, overlap){
   const div = document.createElement("div");
   div.className = "folder";
+  if (SELC.has(Q[c.top])) div.className += " linkmark";
   if (c.same === true) div.className += " same";
   else if (c.same === false) div.className += " diff";
   if (state.sel && state.sel.col === col.prov && state.sel.label === c.label) div.className += " sel";
@@ -41,7 +42,16 @@ function folderEl(c, col, overlap){
     pb.addEventListener("mouseleave", popHideSoon);
     pb.addEventListener("click", e => e.stopPropagation());
   }
-  head.addEventListener("click", () => toggleFolder(div, c, col));
+  head.addEventListener("click", e => {
+    if (e.ctrlKey || e.metaKey){
+      // Ctrl+клик — отметить/снять кластер для связки (правила «вместе»/«врозь»)
+      const anchor = Q[c.top];
+      SELC.has(anchor) ? SELC.delete(anchor) : SELC.add(anchor);
+      render();
+      return;
+    }
+    toggleFolder(div, c, col);
+  });
   head.addEventListener("contextmenu", e => { e.preventDefault(); showCtx(e, c); });
   return div;
 }

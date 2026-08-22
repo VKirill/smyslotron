@@ -13,6 +13,7 @@ function scoreOf(r){
 }
 let QIDX = new Map();              // текст фразы -> индекс
 let SELQ = new Set();              // выделенные галочками фразы (тексты)
+let SELC = new Set();              // отмеченные для связки кластеры (якорь = маркер-фраза)
 function saveRules(){ dbSet("sem_rules:" + (PID || "demo"), RULES); }
 let _mwCache = {key: "", parsed: []};
 function _mwParsed(){
@@ -45,7 +46,23 @@ function showCtx(e, c){
   const m = document.createElement("div");
   m.id = "ctxmenu";
   const n = c.idxs.length;
+  const anchor = Q[c.top];
+  const linkCnt = SELC.size + (SELC.has(anchor) ? 0 : 1);
   const items = [
+    [SELC.has(anchor) ? "✖" : "☑",
+     SELC.has(anchor) ? "Снять отметку связки" : "Отметить для связки (или Ctrl+клик по папке)",
+     () => { SELC.has(anchor) ? SELC.delete(anchor) : SELC.add(anchor); render(); }],
+    ...(linkCnt >= 2 ? [
+      ["🔗", `Слить отмеченные кластеры в один (${linkCnt})`, () => {
+        RULES.must.push([...new Set([...SELC, anchor])]);
+        SELC.clear(); saveRules(); render();
+      }],
+      ["⛓", `Отмеченные — никогда вместе (${linkCnt})`, () => {
+        RULES.not.push([...new Set([...SELC, anchor])]);
+        SELC.clear(); saveRules(); render();
+      }],
+    ] : []),
+    ...(SELC.size ? [["🧹", `Сбросить отметки связки (${SELC.size})`, () => { SELC.clear(); render(); }]] : []),
     ["☑", `Выделить фразы кластера (${fmt(n)})`, () => {
       for (const i of c.idxs) SELQ.add(Q[i]);
       updateSelBar(); render();
@@ -63,7 +80,7 @@ function showCtx(e, c){
   for (const [ico, label, fn] of items){
     const d = document.createElement("div");
     d.className = "ctxitem";
-    d.innerHTML = `<span>${ico}</span><span>${label}</span>`;
+    d.innerHTML = `<span>${ico}</span><span>${label}</span>`; // guardian: allow статические строки из кода
     d.onclick = () => { hideCtx(); fn(); };
     m.appendChild(d);
   }
@@ -82,13 +99,13 @@ function renderRules(){
   const rows = [];
   RULES.must.forEach((g, i) => rows.push({icon: "🔗", g, kind: "must", i}));
   RULES.not.forEach((g, i) => rows.push({icon: "⛓", g, kind: "not", i}));
-  el.innerHTML = rows.length ? "" : '<div style="color:var(--muted)">правил пока нет</div>';
+  el.innerHTML = rows.length ? "" : '<div style="color:var(--muted)">правил пока нет</div>'; // guardian: allow статическая строка
   for (const r of rows){
     const d = document.createElement("div");
     d.className = "q";
     d.style.cursor = "pointer";
     d.title = r.g.join("\n") + "\n\nКлик — удалить правило";
-    d.innerHTML = `<span class="qt">${r.icon} ${esc(r.g[0])} + ${r.g.length > 2 ? `ещё ${r.g.length - 1}` : esc(r.g[1] || "")}</span><span class="qf">×</span>`;
+    d.innerHTML = `<span class="qt">${r.icon} ${esc(r.g[0])} + ${r.g.length > 2 ? `ещё ${r.g.length - 1}` : esc(r.g[1] || "")}</span><span class="qf">×</span>`; // guardian: allow значения проходят esc()
     d.onclick = () => { RULES[r.kind].splice(r.i, 1); saveRules(); render(); };
     el.appendChild(d);
   }

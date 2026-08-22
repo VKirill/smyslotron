@@ -215,3 +215,6 @@
     aside{width:100%; min-width:0; border-right:0; border-bottom:1px solid var(--border)}
     body{overflow:auto; height:auto}
   }
+
+  .folder.linkmark{outline:2px solid var(--accent); outline-offset:-2px}
+  .folder.linkmark .fhead::after{content:"🔗"; font-size:11px}
