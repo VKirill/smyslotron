@@ -190,7 +190,6 @@
     <div class="grp actions">
       <a id="savesl" class="csvbtn" href="#" title="Зафиксировать текущий срез (вариант, режим, сила, мин. размер) как кластеризацию проекта: серверный CSV и интенты кластеров будут считаться по нему">💾 Сохранить срез</a>
       <a id="slicebtn" class="csvbtn" href="#" title="Выгрузить кластеры ровно с текущими настройками (вариант, режим, сила, мин. размер)">⬇ Текущий срез в CSV</a>
-      <a id="csvlink" class="csvbtn" style="display:none" href="#" title="Серверный CSV: базовый вариант, средняя связь, автопорог — или зафиксированный срез, если сохранён (+интенты, если размечены)">Скачать CSV</a>
     </div>
     <div class="grp">
       <label>Эмбеддинги</label>
@@ -1031,8 +1030,6 @@ async function boot(){
       $("#psub").textContent = `${(pr.rows||0).toLocaleString("ru-RU")} фраз · ` +
         (pr.uniq ? `${pr.uniq.toLocaleString("ru-RU")} уникальных смыслов · ` : "") +
         `создан ${pr.created || ""}`;
-      const cl = $("#csvlink");
-      cl.style.display = ""; cl.href = DATA_BASE + "result.csv";
     }catch(e){}
   }
   META = await (await fetch(DATA_BASE + "meta.json", {cache: "no-cache", credentials: "same-origin"})).json();
