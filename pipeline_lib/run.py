@@ -7,7 +7,9 @@ import time
 import numpy as np
 
 from . import ctx
-from .cluster import apply_slice, base_labels, build_all, save_thresholds, trees_ready
+from .cluster import apply_slice, base_labels, build_all, labels_from_bin, save_thresholds, trees_ready
+from .remote import avail_gb, build_remote, need_gb
+from .config import P_COARSE, P_FINE
 from .config import DERIVED, METHODS, PRICE, TITLES, USD_RUB
 from .ctx import set_status
 from .dedup import pick_reps
@@ -17,9 +19,20 @@ from .llm import deepseek_label_phrases
 from .morpho import analyze
 
 
+async def build_trees(emb, vkey, data_dir, pct_from, pct_to, n_reps):
+    """Деревья локально, если RAM хватает; иначе — на арендованной машине Vast.ai.
+    Возвращает (fine, coarse, t_fine, t_coarse)."""
+    need, avail = need_gb(emb.shape[0]), avail_gb()
+    if need <= avail:
+        return build_all(emb, vkey, data_dir, pct_from, pct_to)
+    tf, tc = await build_remote(emb, vkey, data_dir, P_FINE, P_COARSE)
+    fb = data_dir / f"{vkey}_avg.bin"
+    return (labels_from_bin(fb, n_reps, tf), labels_from_bin(fb, n_reps, tc), tf, tc)
+
+
 async def main(variants: list[str], target_geo: str, label_only: bool) -> None:
     import csv
-    usd = {"openai": 0.0, "gemini": 0.0, "deepseek": 0.0, "voyage": 0.0, "qwen": 0.0}
+    usd = {"openai": 0.0, "gemini": 0.0, "deepseek": 0.0, "voyage": 0.0, "qwen": 0.0, "vast": 0.0}
     variants = [v for v in variants if v in TITLES] or ["openai"]
     qs, fb, fe, fv, ft, fq, fp = load_keys()
     n = len(qs)
@@ -85,7 +98,7 @@ async def main(variants: list[str], target_geo: str, label_only: bool) -> None:
         if quick is not None:
             fine, coarse = quick  # деревья готовы — режем из .bin за секунды
         else:
-            fine, coarse, tf, tc = build_all(emb_base[rep_idx], base_key, data_dir, 96, 98)
+            fine, coarse, tf, tc = await build_trees(emb_base[rep_idx], base_key, data_dir, 96, 98, len(reps))
             save_thresholds(data_dir, base_key, tf, tc)
         fine = apply_slice(fine, r_geo, target_geo)
         names_f, names_c = name_of(fine, r_qs, r_fp), name_of(coarse, r_qs, r_fp)
@@ -124,6 +137,7 @@ async def main(variants: list[str], target_geo: str, label_only: bool) -> None:
                             lab, names_f[lab], int(coarse[k]), names_c[int(coarse[k])],
                             phrase_int.get(k, ""), a.get("dom", ""), a.get("sec", ""),
                             a.get("mixed", "")])
+        usd["vast"] = float(ctx._status.get("vast_usd", 0) or 0)
         costs = save_costs(usd, n, labeled_clusters=len(got))
         set_status("Готово", 100, done=True,
                    cost_rub=round(sum(usd.values()) * USD_RUB, 2), costs=costs,
@@ -168,8 +182,8 @@ async def main(variants: list[str], target_geo: str, label_only: bool) -> None:
             pass
         try:
             emb = await store.get(vkey)
-            f_, c_, tf, tc = build_all(emb[rep_idx], vkey, data_dir,
-                                       int(38 + vi * span), int(38 + (vi + 1) * span))
+            f_, c_, tf, tc = await build_trees(emb[rep_idx], vkey, data_dir,
+                                               int(38 + vi * span), int(38 + (vi + 1) * span), len(reps))
             save_thresholds(data_dir, vkey, tf, tc)
             built.append(vkey)
             if vkey == base_key:
@@ -179,7 +193,7 @@ async def main(variants: list[str], target_geo: str, label_only: bool) -> None:
             set_status(f"Вариант {TITLES.get(vkey, vkey)} пропущен: {type(e).__name__}",
                        int(38 + (vi + 1) * span), skipped=skipped)
     if fine is None:  # база не построилась в цикле — считаем отдельно
-        fine, coarse, tf, tc = build_all(emb_base[rep_idx], base_key, data_dir, 93, 95)
+        fine, coarse, tf, tc = await build_trees(emb_base[rep_idx], base_key, data_dir, 93, 95, len(reps))
         save_thresholds(data_dir, base_key, tf, tc)
     fine = apply_slice(fine, r_geo, target_geo)
 
@@ -208,6 +222,7 @@ async def main(variants: list[str], target_geo: str, label_only: bool) -> None:
                      int(fine[k]), names_f[int(fine[k])],
                      int(coarse[k]), names_c[int(coarse[k])]])
     write_result(rows)
+    usd["vast"] = float(ctx._status.get("vast_usd", 0) or 0)
     costs = save_costs(usd, n)
     (ctx.PDIR / "report.md").write_text(
         f"# {ctx.PDIR.name}\n\nФраз: {n} · уникальных смыслов: {len(reps)} · "

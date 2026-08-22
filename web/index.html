@@ -222,7 +222,7 @@ async function refreshList(){
         ${pr.cost_rub ? `<span class="stat"><b>${(+pr.cost_rub).toFixed(2)}</b> ₽</span>` : ""}
       </div>
       <div class="meta">${pr.created}${pr.history ? ` · 📈 ${esc(pr.history)}` : ""}</div>
-      ${pr.costs?.total_usd ? `<div class="meta">💰 OpenAI $${pr.costs.openai_usd} · Gemini $${pr.costs.gemini_usd}${pr.costs.voyage_usd ? ` · Voyage $${pr.costs.voyage_usd}` : ""}${pr.costs.qwen_usd ? ` · Qwen $${pr.costs.qwen_usd}` : ""}${pr.costs.deepseek_usd ? ` · LLM $${pr.costs.deepseek_usd}` : ""} · <b>$${pr.costs.per_query_usd}/запрос</b></div>` : ""}
+      ${pr.costs?.total_usd ? `<div class="meta">💰 OpenAI $${pr.costs.openai_usd} · Gemini $${pr.costs.gemini_usd}${pr.costs.voyage_usd ? ` · Voyage $${pr.costs.voyage_usd}` : ""}${pr.costs.qwen_usd ? ` · Qwen $${pr.costs.qwen_usd}` : ""}${pr.costs.deepseek_usd ? ` · LLM $${pr.costs.deepseek_usd}` : ""}${pr.costs.vast_usd ? ` · Vast.ai $${pr.costs.vast_usd}` : ""} · <b>$${pr.costs.per_query_usd}/запрос</b></div>` : ""}
       ${pr.status === "running" ? `<div class="meta" style="color:var(--warn)">${esc(stage)}…</div><div class="bar"><i style="width:${pct}%"></i></div>` : ""}
       ${pr.status === "failed" ? `<div class="meta" style="color:var(--err)" title="${esc(pr.error || "")}">${esc((pr.error || "").slice(0, 120))}</div>` : ""}
       <div class="cfoot">

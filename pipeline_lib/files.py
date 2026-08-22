@@ -54,10 +54,10 @@ def save_costs(usd, n, labeled_clusters=0):
         prev = json.loads(path.read_text())
     except (OSError, json.JSONDecodeError):
         pass
-    for k in ("openai_usd", "gemini_usd", "deepseek_usd", "voyage_usd", "qwen_usd"):
+    for k in ("openai_usd", "gemini_usd", "deepseek_usd", "voyage_usd", "qwen_usd", "vast_usd"):
         prev[k] = round(prev.get(k, 0) + usd.get(k.split("_")[0], 0), 4)
     prev["total_usd"] = round(sum(prev.get(k, 0) for k in
-        ("openai_usd", "gemini_usd", "deepseek_usd", "voyage_usd", "qwen_usd")), 4)
+        ("openai_usd", "gemini_usd", "deepseek_usd", "voyage_usd", "qwen_usd", "vast_usd")), 4)
     prev["per_query_usd"] = round(prev["total_usd"] / max(1, n), 6)
     if labeled_clusters:
         prev["labeled_clusters"] = labeled_clusters
