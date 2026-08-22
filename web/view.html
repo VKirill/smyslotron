@@ -251,6 +251,8 @@
     <div class="grp">
       <label>Поиск по фразам</label>
       <input type="search" id="search" placeholder='[под ключ] · "купить слона" · !москве · !!аренда'>
+      <label style="display:flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; margin-top:6px">
+        <input type="checkbox" id="searchOnly"> показывать только совпавшие фразы</label>
       <div class="hint">операторы как в Вордстате: <b>[слова]</b> — подряд и в этом
       порядке; <b>"слова"</b> — фраза ровно из этих слов; <b>!слово</b> — ровно такая
       форма (работает и внутри скобок/кавычек); <b>!!</b> в начале (или <b>!</b> перед
@@ -432,6 +434,7 @@ const state = {cols: ["openai"], mode: "hard",
                slider: 8200, minSize: 2, search: "",
                fMode: "off", fMin: 10, fMetric: "f",   // фильтр по частотности: off|hide|nogroup
                minusWords: [],       // минус-слова: фразы с ними (в любой форме) вне кластеризации
+               searchOnly: false,    // при поиске показывать в папках только совпавшие фразы
                anOn: false, anQ: [""], anFocus: null,  // режим анализа: столбцы-поиски
                cmpTpls: [],          // имена шаблонов, включённых в сравнение колонками
                targetGeo: "",        // целевой регион: его гео = «без гео»
@@ -859,7 +862,7 @@ function expandInto(div, c, onlyMatches, colQ){
   ql.className = "qlist";
   const sq = (colQ !== undefined ? colQ : normQ(state.search));
   let pool = c.idxs;
-  if (onlyMatches && sq) pool = pool.filter(i => matchQ(i, sq));
+  if ((onlyMatches || state.searchOnly) && sq) pool = pool.filter(i => matchQ(i, sq));
   const sorted = [...pool].sort((x, y) => {
     if (sq){
       const mx = matchQ(x, sq) ? 1 : 0, my = matchQ(y, sq) ? 1 : 0;
@@ -1171,7 +1174,7 @@ function savePrefs(){ dbSet("sem_prefs:" + (PID || "demo"),
   {view: state.cols, search: state.search, sliders: state.sliders,
    targetGeo: state.targetGeo, mode: state.mode,
    anOn: state.anOn, anQ: state.anQ, cmpTpls: state.cmpTpls,
-   minusWords: state.minusWords,
+   minusWords: state.minusWords, searchOnly: state.searchOnly,
    fMode: state.fMode, fMin: state.fMin, fMetric: state.fMetric}); }
 
 // ---------- шаблоны фильтров ----------
@@ -1471,6 +1474,7 @@ async function boot(){
   $("#fMin").addEventListener("input", e => { state.fMin = Math.max(0, +e.target.value || 0); savePrefs(); if (state.fMode !== "off"){ state.sel = null; render(); } });
   $("#fMetric").addEventListener("change", () => { state.fMetric = $("#fMetric").value; savePrefs(); if (state.fMode !== "off"){ state.sel = null; render(); } });
   $("#search").addEventListener("input", e => { state.search = e.target.value; state.shown = {}; savePrefs(); render(); });
+  $("#searchOnly").addEventListener("change", e => { state.searchOnly = e.target.checked; savePrefs(); render(); });
   let tgTimer = null;
   $("#targetGeo").addEventListener("input", e => {
     state.targetGeo = e.target.value;
@@ -1506,6 +1510,7 @@ async function boot(){
     state.minusWords = prefs.minusWords.map(String);
     $("#minusW").value = state.minusWords.join("\n");
   }
+  if (prefs.searchOnly){ state.searchOnly = true; $("#searchOnly").checked = true; }
   if (["off", "hide", "nogroup"].includes(prefs.fMode)){
     state.fMode = prefs.fMode;
     state.fMin = Math.max(0, +prefs.fMin || 0);
