@@ -49,6 +49,12 @@
     color:var(--muted); cursor:pointer; font-size:14px}
   .seg button.on{background:var(--accent); color:#fff}
   .hint{font-size:13px; color:var(--muted); margin-top:6px}
+  .seg.tabs{margin-bottom:18px}
+  .seg.tabs button{position:relative}
+  .seg.tabs button.dot::after{content:""; position:absolute; top:6px; right:8px;
+    width:6px; height:6px; border-radius:50%; background:var(--green)}
+  .tabpane{display:none}
+  .tabpane.on{display:block}
   input[type=range]{width:100%; accent-color:var(--accent)}
   .row{display:flex; justify-content:space-between; font-size:13.5px; color:var(--muted)}
   .row b{color:var(--text)}
@@ -192,6 +198,12 @@
       <a id="slicebtn" class="csvbtn" href="#" title="Excel с текущим срезом: лист «Кластеры» — все запросы со всей информацией, лист «Маркеры» — чистый список маркерных запросов">⬇ Excel</a>
       <a id="markbtn" class="csvbtn" href="#" title="Скопировать в буфер все маркерные запросы текущего среза (топ-фраза каждой папки, по одной на строку)">⧉ Маркеры</a>
     </div>
+    <div class="seg tabs" id="sideTabs">
+      <button data-v="main" class="on">Основные</button>
+      <button data-v="filters" id="tabFilters">Фильтры</button>
+      <button data-v="tpls">Шаблоны</button>
+    </div>
+    <div class="tabpane on" id="pane-main">
     <div class="grp">
       <label>Эмбеддинги</label>
       <div class="seg" id="segProvider"></div>
@@ -217,6 +229,8 @@
       <input type="number" id="minSize" min="1" value="2">
       <div class="hint">папки меньше — в «Без группы» в конце списка</div>
     </div>
+    </div><!-- /pane-main -->
+    <div class="tabpane" id="pane-filters">
     <div class="grp">
       <label>Поиск по фразам</label>
       <input type="search" id="search" placeholder='[под ключ] · "купить слона" · !москве · !!аренда'>
@@ -261,6 +275,8 @@
       <div class="hint">синонимы региона через запятую: их слова вычитаются из гео фразы —
       «дома под ключ в москве и мо» склеится с «дома под ключ», а Казань останется отдельно</div>
     </div>
+    </div><!-- /pane-filters -->
+    <div class="tabpane" id="pane-tpls">
     <details class="help">
       <summary>Как это работает</summary>
       <p>Каждая фраза превращена в <b>эмбеддинг</b> — числовой «слепок смысла» от языковой
@@ -330,6 +346,7 @@
       <label>Шаблоны фильтров <button id="tplAdd" class="tadd" title="Сохранить текущие настройки как шаблон">+</button></label>
       <div id="tplList"></div>
     </div>
+    </div><!-- /pane-tpls -->
   </aside>
   <div id="work"></div>
 </main>
@@ -878,6 +895,9 @@ function render(){
       <span>Папок всего</span><span>${fmt(c0.clusters.length)}</span>
       <span>Одиночек</span><span>${fmt(singles)}</span>
       <span>Слияний применено</span><span>${fmt(c0.k)} / ${fmt(N - 1)}</span>`;
+    // зелёная точка на табе «Фильтры», если хоть один фильтр активен
+    $("#tabFilters").classList.toggle("dot",
+      !!(state.search.trim() || state.fMode !== "off" || state.targetGeo.trim() || state.anOn));
     renderTpls();
   });
 }
@@ -1243,6 +1263,11 @@ async function boot(){
 
   $("#slicebtn").onclick = e => { e.preventDefault(); exportSlice(); };
   $("#markbtn").onclick = e => { e.preventDefault(); copyMarkers(e.currentTarget); };
+
+  document.querySelectorAll("#sideTabs button").forEach(b => b.onclick = () => {
+    document.querySelectorAll("#sideTabs button").forEach(x => x.classList.toggle("on", x === b));
+    document.querySelectorAll(".tabpane").forEach(p => p.classList.toggle("on", p.id === "pane-" + b.dataset.v));
+  });
 
   $("#savesl").onclick = async e => {
     e.preventDefault();
