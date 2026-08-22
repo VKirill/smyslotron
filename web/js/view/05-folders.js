@@ -166,7 +166,7 @@ function expandInto(div, c, onlyMatches, colQ){
   const CAP = 300;
   ql.innerHTML = sorted.slice(0, CAP).map(i => {
     const q = sq;
-    const hitDup = q && D && D[i] && D[i].some(f => f.toLowerCase().includes(q)) && !Q[i].toLowerCase().includes(q);
+    const hitDup = false;  // дубли в поиске не участвуют
     const dd = D && D[i] && D[i].length
       ? ` <span class="dup${hitDup ? " hit" : ""}" title="${esc(D[i].join(", "))}">+${D[i].length} дубл.${hitDup ? " ✓" : ""}</span>` : "";
     const ib = INT && INT[i]

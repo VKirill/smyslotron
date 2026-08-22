@@ -69,7 +69,8 @@ function matchQ(i, q){
     // смешанный режим: !точные + обычные подстроки
     return c.exact.every(w => raw.includes(w)) && c.subs.every(x => low.includes(x));
   };
-  const hit = hitText(Q[i], L && L[i] || "") || !!(D && D[i] && D[i].some(f => hitText(f, "")));
+  // ищем только по самой фразе-представителю: дубли в поиске не участвуют
+  const hit = hitText(Q[i], L && L[i] || "");
   return c.neg ? !hit : hit;
 }
 function hi(s, q){
