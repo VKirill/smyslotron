@@ -77,6 +77,12 @@ async def run_pipeline(row: sqlite3.Row) -> None:
                  st.get("cost_rub", 0), 1 if row["task"] == "label" else 0,
                  json.dumps(st.get("costs", {}), ensure_ascii=False), row["id"]))
         else:
-            msg = (st.get("error") or (err or b"").decode()[-500:] or "неизвестная ошибка")
+            msg = (st.get("error") or (err or b"").decode()[-500:])
+            if not msg and proc.returncode in (-9, 137):
+                msg = ("Процесс убит системой за нехватку памяти (OOM) на стадии "
+                       f"«{st.get('stage', '?')}» — слишком много уникальных смыслов для "
+                       "полной матрицы сходства. Сократи ядро (минус-слова, порог частотности) "
+                       "или разбей на тематические проекты")
+            msg = msg or f"неизвестная ошибка (код {proc.returncode})"
             c.execute("UPDATE projects SET status='failed', error=? WHERE id=?",
                       (msg[:500], row["id"]))

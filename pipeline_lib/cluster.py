@@ -107,7 +107,25 @@ def labels_from_bin(fbin, n_reps: int, t: float):
     return np.array([find(i) for i in range(n_reps)])
 
 
+def _avail_gb() -> float:
+    try:
+        for line in open("/proc/meminfo"):
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) / 1e6
+    except OSError:
+        pass
+    return 1e9
+
+
 def build_all(emb, provider, data_dir, pct_from, pct_to):
+    n = emb.shape[0]
+    need = n * n * 4 * 2.2 / 1e9  # матрица float32 + cond + копия scipy (float64)
+    avail = _avail_gb()
+    if need > avail:
+        raise MemoryError(
+            f"{n:,} уникальных смыслов: для построения деревьев нужно ~{need:.0f} ГБ RAM, "
+            f"доступно {avail:.0f} ГБ. Сократи ядро: минус-слова/корзина, порог частотности "
+            f"(нулевики), или разбей на тематические проекты")
     x = _norm(emb).astype(np.float32)
     dist = x @ x.T                      # float32: вдвое меньше памяти, чем float64
     np.subtract(1.0, dist, out=dist)
