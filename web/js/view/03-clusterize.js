@@ -8,8 +8,10 @@ function clusterize(lab){
       map.set("f" + i, [i]);  // «в Без группы»: одиночка уйдёт под мин. размер папки
       continue;
     }
-    let arr = map.get(lab[i]);
-    if (!arr) map.set(lab[i], arr = []);
+    // при quesSplit вопросительные фразы уходят в парный «вопросный» кластер
+    const key = state.quesSplit && W && W[i] ? lab[i] + "?q" : lab[i];
+    let arr = map.get(key);
+    if (!arr) map.set(key, arr = []);
     arr.push(i);
   }
   // фразы с разными городами не сливаем: кластер с >1 гео-ключом режется по гео;

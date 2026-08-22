@@ -168,6 +168,11 @@ async function boot(){
   $("#fMetric").addEventListener("change", () => { state.fMetric = $("#fMetric").value; savePrefs(); if (state.fMode !== "off"){ state.sel = null; render(); } });
   $("#search").addEventListener("input", e => { state.search = e.target.value; state.shown = {}; savePrefs(); render(); });
   $("#searchOnly").addEventListener("change", e => { state.searchOnly = e.target.checked; savePrefs(); render(); });
+  $("#quesSplit").addEventListener("change", e => {
+    state.quesSplit = e.target.checked;
+    state.sel = null; state.shown = {};
+    savePrefs(); render();
+  });
   $("#searchScope").addEventListener("change", () => {
     state.searchScope = $("#searchScope").value;
     state.shown = {};
@@ -209,6 +214,7 @@ async function boot(){
     $("#minusW").value = state.minusWords.join("\n");
   }
   if (prefs.searchOnly){ state.searchOnly = true; $("#searchOnly").checked = true; }
+  if (prefs.quesSplit){ state.quesSplit = true; $("#quesSplit").checked = true; }
   if (["all", "name"].includes(prefs.searchScope)){
     state.searchScope = prefs.searchScope;
     $("#searchScope").value = state.searchScope;

@@ -84,6 +84,14 @@
       «в Без группы» — вынимаются из кластеров и лежат внизу отдельно
       (частотность — суммарная по фразе вместе с её дублями)</div>
     </div>
+    <div class="grp" data-g="ques">
+      <label>Вопросительные фразы</label>
+      <label style="display:flex; align-items:center; gap:7px; font-size:13.5px; cursor:pointer">
+        <input type="checkbox" id="quesSplit"> кластеризовать отдельно</label>
+      <div class="hint">каждая папка делится на две: обычные запросы и вопросы (❓ —
+      флаг keys.so + автоопределение «как/что/почему…»). Вопросные подпапки — кандидаты
+      в статьи/FAQ, обычные — в посадочные</div>
+    </div>
     <div class="grp" data-g="geo">
       <label>Целевое гео</label>
       <input type="search" id="targetGeo" list="geoList" placeholder="москва, мо, подмосковье">
@@ -248,15 +256,15 @@
 </div>
 <div id="loader"><div class="spin"></div><div id="loadmsg">Загрузка данных…</div></div>
 
-<script src="js/view/01-core.js?v=2"></script>
+<script src="js/view/01-core.js?v=3"></script>
 <script src="js/view/02-exclusions.js?v=3"></script>
-<script src="js/view/03-clusterize.js?v=1"></script>
+<script src="js/view/03-clusterize.js?v=2"></script>
 <script src="js/view/04-search.js?v=1"></script>
 <script src="js/view/05-folders.js?v=4"></script>
 <script src="js/view/06-render.js?v=2"></script>
-<script src="js/view/07-prefs.js?v=2"></script>
+<script src="js/view/07-prefs.js?v=3"></script>
 <script src="js/view/08-export.js?v=1"></script>
 <script src="js/view/09-prompts.js?v=2"></script>
-<script src="js/view/10-boot.js?v=3"></script>
+<script src="js/view/10-boot.js?v=4"></script>
 </body>
 </html>
