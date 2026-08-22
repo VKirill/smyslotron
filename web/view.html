@@ -80,6 +80,14 @@
     background:var(--panel); font-size:12.5px; color:var(--muted);
     display:flex; justify-content:space-between; align-items:center; gap:8px}
   .colhead b{color:var(--text)}
+  .colhead input.anq{flex:1; min-width:0; padding:5px 8px; background:var(--panel2);
+    border:1px solid var(--border); border-radius:7px; color:var(--text);
+    font-size:13px; font-family:inherit; outline:none}
+  .colhead input.anq:focus{border-color:var(--accent)}
+  .colhead .ancnt{flex:none; white-space:nowrap}
+  .colhead .andel{background:none; border:0; color:var(--muted); cursor:pointer;
+    font-size:16px; line-height:1; padding:0 2px}
+  .colhead .andel:hover{color:var(--err)}
   .list{flex:1; overflow-y:auto; padding:8px 10px}
   .folder{border:1px solid var(--border); border-radius:9px; margin-bottom:7px;
     background:var(--panel); overflow:hidden}
@@ -200,6 +208,15 @@
     <div class="grp">
       <label>Поиск по фразам</label>
       <input type="search" id="search" placeholder="например: аниме">
+    </div>
+    <div class="grp">
+      <label>Режим анализа</label>
+      <label style="display:flex; align-items:center; gap:7px; font-size:13.5px; cursor:pointer">
+        <input type="checkbox" id="anOn"> столбцы-поиски</label>
+      <button class="link" id="anAdd" style="display:none; margin-top:6px">+ добавить столбец</button>
+      <div class="hint">каждый столбец — свой поиск по одной и той же кластеризации
+      (первый включённый вариант): удобно следить, в какие группы попадают нужные запросы.
+      Обычный поиск слева при этом не действует</div>
     </div>
     <div class="grp">
       <label>Фильтр по частотности</label>
@@ -329,6 +346,7 @@ const TREES = {};                    // "openai_hard" -> {a,b,d}
 const state = {cols: ["openai"], mode: "hard",
                slider: 8200, minSize: 2, search: "",
                fMinOn: false, fMin: 10, fMetric: "f",  // фильтр по частотности
+               anOn: false, anQ: [""], anFocus: null,  // режим анализа: столбцы-поиски
                targetGeo: "",        // целевой регион: его гео = «без гео»
                sliders: {},          // сила объединения на каждый вид: openai/gemini/ab
                sel: null,            // папка для сравнения в A/B: {col, label, idxs}
@@ -425,13 +443,24 @@ function clusterize(lab){
 function kFromSlider(){ return Math.round(state.slider / 10000 * (N - 1)); }
 
 async function getCols(){
+  if (state.anOn){
+    // режим анализа: N колонок одной и той же кластеризации, у каждой свой поиск
+    const p = state.cols[0];
+    const tree = await loadTree(p + "_" + state.mode);
+    const k = kFromSlider();
+    const lab = cutLabels(tree, k);
+    const clusters = clusterize(lab);
+    return state.anQ.map((aq, ai) => ({prov: p, tree, k, clusters, lab,
+      an: ai, anq: aq, q: (aq || "").trim().toLowerCase(), key: p + "#a" + ai}));
+  }
   const provs = state.cols;
   const cols = [];
+  const gq = state.search.trim().toLowerCase();
   for (const p of provs){
     const tree = await loadTree(p + "_" + state.mode);
     const k = kFromSlider();
     const lab = cutLabels(tree, k);
-    cols.push({prov: p, tree, k, clusters: clusterize(lab), lab});
+    cols.push({prov: p, tree, k, clusters: clusterize(lab), lab, q: gq, key: p});
   }
   return cols;
 }
@@ -459,11 +488,11 @@ function folderEl(c, col, overlap){
   const consTitle = c.same === true ? "Состав совпал во всех включённых вариантах"
     : c.same === false ? "Состав отличается в: " + (c.diffWith || []).join(", ") : "";
   div.innerHTML = `<div class="fhead"><span class="icon" title="${esc(consTitle)}">${c.icon || "📁"}</span>
-      <span class="name" title="${esc(name)}">${hi(name, state.search)}</span>
+      <span class="name" title="${esc(name)}">${hi(name, col.q || "")}</span>
       ${c.dom ? `<span class="badge int ${INT_CLS[c.dom] || ""}${c.mixed ? " mx" : ""}" title="Интент кластера: ${esc(c.dom)}${c.mixed ? " (смешанный — есть второй интент ≥25%)" : ""}">${INT_SHORT[c.dom] || "?"}${c.mixed ? "⚠" : ""}</span>` : ""}
       ${c.geo ? `<span class="badge geo" title="Гео-кластер">📍 ${esc(c.geo)}</span>` : ""}
       ${c.qn ? `<span class="badge qb" title="Вопросных фраз">❓ ${Math.round(c.qn / c.idxs.length * 100)}%</span>` : ""}
-      ${isAB() ? `<button class="cmp" title="Найти эти фразы в соседней колонке">⇄</button>` : ""}
+      ${isAB() && !state.anOn ? `<button class="cmp" title="Найти эти фразы в соседней колонке">⇄</button>` : ""}
       <button class="copy" title="Скопировать уникальные фразы кластера (без дублей)">⧉</button>
       ${overlap ? `<span class="badge ov">${overlap} общ.</span>` : ""}
       <span class="badge" title="Уникальных смыслов${c.dups ? ` + склеенных дублей` : ""}">${fmt(c.idxs.length)}${c.dups ? `+${fmt(c.dups)}` : ""} фраз</span>
@@ -484,10 +513,10 @@ function folderEl(c, col, overlap){
 }
 
 function toggleFolder(div, c, col){
-  const key = col.prov + ":" + c.label;
+  const key = (col.key || col.prov) + ":" + c.label;
   const open = div.querySelector(".qlist");
   if (open){ open.remove(); state.expanded.delete(key); return; }
-  expandInto(div, c);
+  expandInto(div, c, false, col.q || "");
   state.expanded.add(key);
 }
 
@@ -505,10 +534,10 @@ async function copyCluster(c, btn){
   }
 }
 
-function expandInto(div, c, onlyMatches){
+function expandInto(div, c, onlyMatches, colQ){
   const ql = document.createElement("div");
   ql.className = "qlist";
-  const sq = state.search.trim().toLowerCase();
+  const sq = (colQ !== undefined ? colQ : state.search.trim().toLowerCase());
   let pool = c.idxs;
   if (onlyMatches && sq) pool = pool.filter(i => matchQ(i, sq));
   const sorted = [...pool].sort((x, y) => {
@@ -520,7 +549,7 @@ function expandInto(div, c, onlyMatches){
   });
   const CAP = 300;
   ql.innerHTML = sorted.slice(0, CAP).map(i => {
-    const q = state.search.trim().toLowerCase();
+    const q = sq;
     const hitDup = q && D && D[i] && D[i].some(f => f.toLowerCase().includes(q)) && !Q[i].toLowerCase().includes(q);
     const dd = D && D[i] && D[i].length
       ? ` <span class="dup${hitDup ? " hit" : ""}" title="${esc(D[i].join(", "))}">+${D[i].length} дубл.${hitDup ? " ✓" : ""}</span>` : "";
@@ -529,7 +558,7 @@ function expandInto(div, c, onlyMatches){
     const mk = (W && W[i] ? " ❓" : "") + (G && G[i] ? " 📍" : "");
     const eq = encodeURIComponent(Q[i]);
     const se = `<span class="se"><a class="ya" href="https://yandex.ru/search/?text=${eq}" target="_blank" rel="noopener" title="Выдача Яндекса">Я</a><a class="go" href="https://www.google.com/search?q=${eq}" target="_blank" rel="noopener" title="Выдача Google">G</a></span>`;
-    return `<div class="q"><span class="qt">${ib}${hi(Q[i], state.search)}${mk}${dd}</span>${se}<span class="qf">${fmt(F[i])}</span></div>`;
+    return `<div class="q"><span class="qt">${ib}${hi(Q[i], q)}${mk}${dd}</span>${se}<span class="qf">${fmt(F[i])}</span></div>`;
   }).join("") + (sorted.length > CAP ? `<div class="q"><span class="qt" style="color:var(--muted)">… ещё ${fmt(sorted.length - CAP)}</span></div>` : "");
   div.appendChild(ql);
 }
@@ -551,10 +580,9 @@ function render(){
       work.append(rowTop, rowBottom);
     }
     const topCount = cols.length > 4 ? Math.floor(cols.length / 2) : cols.length;
-    const q = state.search.trim().toLowerCase();
 
     // консенсус: папка зелёная, если её состав совпал во ВСЕХ колонках
-    if (cols.length > 1){
+    if (cols.length > 1 && !state.anOn){
       const sets = cols.map(c => new Set(c.clusters.map(cl => cl.idxs.join(","))));
       for (const c of cols)
         for (const cl of c.clusters){
@@ -569,7 +597,7 @@ function render(){
 
     // A/B: карта пересечений для второй колонки
     let ovMaps = null;
-    if (isAB() && state.sel){
+    if (isAB() && state.sel && !state.anOn){
       if (cols.some(c => c.prov === state.sel.col)){
         ovMaps = {};
         for (const other of cols){
@@ -587,6 +615,7 @@ function render(){
     for (const col of cols){
       const el = document.createElement("div");
       el.className = "col";
+      const q = col.q || "";
       const ovMap = ovMaps ? ovMaps[col.prov] : null;
       const isOther = !!ovMap;
       let clusters = col.clusters;
@@ -601,18 +630,39 @@ function render(){
 
       const head = document.createElement("div");
       head.className = "colhead";
-      head.innerHTML = `<span><b>${titleOf(col.prov)}</b></span>
-        <span>${fmt(clusters.length)} папок${isOther && ovMap ? " с общими фразами" : ""}
-        ${isAB() && state.sel && col.prov === state.sel.col ? ` · <button class="link" id="resetSel">сбросить выбор</button>` : ""}</span>`;
+      if (col.an != null){
+        // режим анализа: вместо названия варианта — поле поиска колонки
+        head.innerHTML = `<input class="anq" placeholder="запросы для отслеживания…"
+            value="${esc(col.anq || "").replace(/"/g, "&quot;")}">
+          <span class="ancnt">${fmt(clusters.length)} папок</span>
+          ${state.anQ.length > 1 ? `<button class="andel" title="Убрать столбец">×</button>` : ""}`;
+        const inp = head.querySelector(".anq");
+        inp.addEventListener("input", () => {
+          state.anQ[col.an] = inp.value;
+          state.anFocus = col.an;
+          clearTimeout(inp._t);
+          inp._t = setTimeout(() => { savePrefs(); render(); }, 350);
+        });
+        const del = head.querySelector(".andel");
+        if (del) del.onclick = () => {
+          state.anQ.splice(col.an, 1);
+          if (!state.anQ.length) state.anQ = [""];
+          state.anFocus = null; savePrefs(); render();
+        };
+      } else {
+        head.innerHTML = `<span><b>${titleOf(col.prov)}</b></span>
+          <span>${fmt(clusters.length)} папок${isOther && ovMap ? " с общими фразами" : ""}
+          ${isAB() && state.sel && col.prov === state.sel.col ? ` · <button class="link" id="resetSel">сбросить выбор</button>` : ""}</span>`;
+      }
       el.appendChild(head);
 
       const list = document.createElement("div");
       list.className = "list";
-      const key = col.prov;
+      const key = col.key || col.prov;
       const shown = state.shown[key] || 200;
       for (const c of clusters.slice(0, shown)){
         const fel = folderEl(c, col, isOther && ovMap ? ovMap.get(c.label) : 0);
-        if (state.expanded.has(col.prov + ":" + c.label)) expandInto(fel, c);
+        if (state.expanded.has(key + ":" + c.label)) expandInto(fel, c, false, q);
         list.appendChild(fel);
       }
       if (clusters.length > shown){
@@ -640,8 +690,8 @@ function render(){
           fel.classList.add("nogroup");
           const hitSearch = q && idxs.some(i => matchQ(i, q));
           // при поиске папка остаётся внизу, но раскрыта и показывает ТОЛЬКО найденное
-          if (hitSearch || state.expanded.has(col.prov + ":__nogroup__"))
-            expandInto(fel, ng, hitSearch);
+          if (hitSearch || state.expanded.has(key + ":__nogroup__"))
+            expandInto(fel, ng, hitSearch, q);
           list.appendChild(fel);
         }
       }
@@ -650,6 +700,13 @@ function render(){
     }
     const rs = $("#resetSel");
     if (rs) rs.onclick = () => { state.sel = null; render(); };
+
+    // режим анализа: вернуть фокус в поле, где печатал пользователь
+    if (state.anOn && state.anFocus != null){
+      const inp = work.querySelectorAll(".anq")[state.anFocus];
+      if (inp){ inp.focus(); const L = inp.value.length; inp.setSelectionRange(L, L); }
+      state.anFocus = null;
+    }
 
     // статистика по первой колонке
     const c0 = cols[0];
@@ -702,7 +759,8 @@ async function loadPrefs(){
 }
 function savePrefs(){ dbSet("sem_prefs:" + (PID || "demo"),
   {view: state.cols, search: state.search, sliders: state.sliders,
-   targetGeo: state.targetGeo, mode: state.mode}); }
+   targetGeo: state.targetGeo, mode: state.mode,
+   anOn: state.anOn, anQ: state.anQ}); }
 
 // ---------- шаблоны фильтров ----------
 let TPLS = [];                       // загружаются в boot() из БД
@@ -872,6 +930,18 @@ async function boot(){
     state.sel = null; savePrefs(); render();
   });
   $("#minSize").addEventListener("input", e => { state.minSize = Math.max(1, +e.target.value || 1); state.sel = null; render(); });
+  $("#anOn").addEventListener("change", e => {
+    state.anOn = e.target.checked;
+    $("#anAdd").style.display = state.anOn ? "" : "none";
+    $("#search").disabled = state.anOn;
+    state.sel = null; state.shown = {}; state.expanded.clear();
+    savePrefs(); render();
+  });
+  $("#anAdd").onclick = () => {
+    state.anQ.push("");
+    state.anFocus = state.anQ.length - 1;
+    savePrefs(); render();
+  };
   $("#fMinOn").addEventListener("change", e => { state.fMinOn = e.target.checked; state.sel = null; state.shown = {}; render(); });
   $("#fMin").addEventListener("input", e => { state.fMin = Math.max(0, +e.target.value || 0); if (state.fMinOn){ state.sel = null; render(); } });
   $("#fMetric").addEventListener("change", () => { state.fMetric = $("#fMetric").value; if (state.fMinOn){ state.sel = null; render(); } });
@@ -903,6 +973,13 @@ async function boot(){
     state.mode = prefs.mode;
     document.querySelectorAll("#segMode button").forEach(b => b.classList.toggle("on", b.dataset.v === state.mode));
     $("#modeHint").textContent = MODE_HINT[state.mode];
+  }
+  if (Array.isArray(prefs.anQ) && prefs.anQ.length) state.anQ = prefs.anQ.map(String);
+  if (prefs.anOn){
+    state.anOn = true;
+    $("#anOn").checked = true;
+    $("#anAdd").style.display = "";
+    $("#search").disabled = true;
   }
   $("#targetGeo").value = state.targetGeo;
   // даталист: топ-30 гео по числу фраз
