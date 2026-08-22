@@ -175,10 +175,12 @@ async def append_project(pid: str, request: Request,
     # новые фразы не добавлять — состав неизменен, эмбеддинги и деревья остаются в силе
     freq_only = bool(body.get("freq_only"))
     added = merged_cnt = 0
+    changed = False  # менялось ли хоть что-то фактически
     for (q, b, e, v, t, w) in new_rows:
         k = q.lower()
         it = index.get(k)
         if it:
+            before = list(it)
             if freq_only:
                 it[1], it[2], it[3] = b, e, v
             else:
@@ -187,12 +189,20 @@ async def append_project(pid: str, request: Request,
                 it[3] = max(it[3], v)
                 it[4] = "1" if it[4] == "1" or t == "1" else "0"
                 it[5] = "1" if it[5] == "1" or w == "1" else "0"
+            if it != before:
+                changed = True
             merged_cnt += 1
         elif not freq_only:
             item = [q, b, e, v, t, w]
             existing.append(item)
             index[k] = item
             added += 1
+            changed = True
+
+    if not changed:
+        # тот же файл, те же цифры — ничего не пересчитываем и не трогаем
+        return {"added": 0, "merged": merged_cnt, "rows": len(existing),
+                "freq_only": freq_only, "ignored_new": 0, "no_change": True}
     if len(existing) > MAX_ROWS:
         raise HTTPException(400, f"Итого больше {MAX_ROWS:,} фраз — не влезает в лимит")
 
@@ -202,17 +212,17 @@ async def append_project(pid: str, request: Request,
                      "Очень точная частотность", "Топоним", "Вопрос"])
         w2.writerows(existing)
 
-    # устаревшие деревья и meta — снести, чтобы «пропуск готовых» их не переиспользовал;
-    # при freq_only состав фраз не менялся — деревья остаются, прогон только
-    # пере-генерит queries.json с новыми суммами (бесплатно, всё из кэшей)
-    if not freq_only:
+    # деревья сносим ТОЛЬКО если реально добавились новые фразы: изменение одних
+    # частот не ломает ни эмбеддинги, ни деревья — прогон лишь пере-генерит
+    # queries.json с новыми суммами (бесплатно, всё из кэшей)
+    if added > 0:
         ddir = pdir / "data"
         if ddir.exists():
             for fb in ddir.glob("*.bin"):
                 fb.unlink(missing_ok=True)
             (ddir / "meta.json").unlink(missing_ok=True)
 
-    entry = f"{time.strftime('%F')} " + (f"частоты×{merged_cnt}" if freq_only else f"+{added}")
+    entry = f"{time.strftime('%F')} " + (f"+{added}" if added else f"частоты×{merged_cnt}")
     # defer_run: при мультизагрузке очередь ставится одним /run после последнего файла,
     # иначе воркер может стартовать между файлами и второй append упрётся в running
     status_sql = "" if body.get("defer_run") else "status='queued', task='cluster', "
