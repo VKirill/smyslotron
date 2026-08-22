@@ -203,14 +203,30 @@ async function refreshList(){
           ${!pr.labeled ? `<button class="btn sec" data-a="label" title="Разметить интенты кластеров через DeepSeek (~10 ₽ на 30К фраз)">Интенты (LLM)</button>` : ""}` : ""}
         ${pr.status === "failed" ? `<button class="btn sec" data-a="run">Повторить</button>` : ""}
         ${pr.status !== "running" && pr.status !== "queued" ? `<button class="btn sec" data-a="add" title="Докинуть фразы из файла: дубли схлопнутся, новое доэмбеддится инкрементально">➕ Фразы</button>` : ""}
+        ${pr.status !== "running" && pr.status !== "queued" ? `<button class="btn sec" data-a="clone" title="Полная копия проекта (ядро, кэши, деревья, интенты, настройки) — для экспериментов, оригинал не тронется">⧉ Копия</button>` : ""}
         ${pr.status !== "running" ? `<button class="btn sec" data-a="del" title="Удалить">🗑</button>` : ""}
       </div>`;
+    card.querySelector(".nm").ondblclick = async () => {
+      const name = prompt("Новое название проекта:", pr.name);
+      if (!name || name.trim() === pr.name) return;
+      try{
+        await api(`projects/${pr.id}/rename`, {method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({name: name.trim()})});
+        refreshList();
+      }catch(e){ alert(e.message); }
+    };
+    card.querySelector(".nm").title = "Двойной клик — переименовать";
     card.querySelectorAll("[data-a]").forEach(b => b.onclick = async () => {
       try{
         if (b.dataset.a === "del"){
           if (!confirm(`Удалить проект «${pr.name}»?`)) return;
           await api(`projects/${pr.id}`, {method: "DELETE"});
         } else if (b.dataset.a === "add"){ APPEND_PID = pr.id; $("#file").click(); return; }
+        else if (b.dataset.a === "clone"){
+          loading(true);
+          try{ await api(`projects/${pr.id}/clone`, {method: "POST"}); }finally{ loading(false); }
+        }
         else if (b.dataset.a === "run") await api(`projects/${pr.id}/run`, {method: "POST"});
         else if (b.dataset.a === "label") await api(`projects/${pr.id}/label`, {method: "POST"});
         refreshList();

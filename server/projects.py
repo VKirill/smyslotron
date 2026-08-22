@@ -236,6 +236,45 @@ async def append_project(pid: str, request: Request,
             "ignored_new": len(new_rows) - merged_cnt - added if freq_only else 0}
 
 
+@router.post("/projects/{pid}/clone")
+async def clone_project(pid: str, user: sqlite3.Row = Depends(current_user)):
+    """Полная копия проекта: файлы (ядро, кэши, деревья, интенты) + настройки
+    просмотрщика (prefs/корзина/правила/оценки). Оригинал остаётся нетронутым."""
+    row = own_project(pid, user)
+    if row["status"] == "running":
+        raise HTTPException(400, "Дождись окончания обработки")
+    new_pid = secrets.token_hex(8)
+    src, dst = project_dir(row), PROJECTS / str(user["id"]) / new_pid
+    shutil.copytree(src, dst)
+    with db() as c:
+        c.execute("INSERT INTO projects(id,user_id,name,status,task,rows,uniq,clusters,"
+                  "cost_rub,labeled,error,created,costs,variants,retries,history,target_geo) "
+                  "SELECT ?,user_id,?,status,task,rows,uniq,clusters,cost_rub,labeled,'',"
+                  "?,costs,variants,0,history,target_geo FROM projects WHERE id=?",
+                  (new_pid, f"{row['name']} — копия", time.strftime("%F %T"), pid))
+        # настройки просмотрщика: sem_prefs / sem_trash / sem_rules / sem_pres
+        for key in ("sem_prefs", "sem_trash", "sem_rules", "sem_pres"):
+            c.execute("INSERT OR REPLACE INTO user_prefs(user_id,key,value,updated) "
+                      "SELECT user_id, ?, value, ? FROM user_prefs "
+                      "WHERE user_id=? AND key=?",
+                      (f"{key}:{new_pid}", time.strftime("%F %T"),
+                       user["id"], f"{key}:{pid}"))
+    return {"id": new_pid}
+
+
+@router.post("/projects/{pid}/rename")
+async def rename_project(pid: str, request: Request,
+                         user: sqlite3.Row = Depends(current_user)):
+    own_project(pid, user)
+    body = await request.json()
+    name = str(body.get("name") or "").strip()[:80]
+    if not name:
+        raise HTTPException(400, "Пустое название")
+    with db() as c:
+        c.execute("UPDATE projects SET name=? WHERE id=?", (name, pid))
+    return {"name": name}
+
+
 @router.delete("/projects/{pid}")
 async def delete_project(pid: str, user: sqlite3.Row = Depends(current_user)):
     row = own_project(pid, user)
