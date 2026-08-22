@@ -238,8 +238,11 @@
     </div>
     <div class="grp">
       <label>Фильтр по частотности</label>
-      <label style="display:flex; align-items:center; gap:7px; font-size:13.5px; cursor:pointer">
-        <input type="checkbox" id="fMinOn"> скрывать фразы реже порога</label>
+      <select id="fMode">
+        <option value="off">нет</option>
+        <option value="hide">скрыть фразы ниже порога</option>
+        <option value="nogroup">фразы ниже порога — в «Без группы»</option>
+      </select>
       <div style="display:flex; gap:7px; margin-top:6px">
         <input type="number" id="fMin" min="0" value="10" style="width:90px">
         <select id="fMetric" style="flex:1">
@@ -247,7 +250,8 @@
           <option value="b">базовая</option>
         </select>
       </div>
-      <div class="hint">фразы с частотностью ниже порога скрываются из всех папок и счётчиков
+      <div class="hint">«скрыть» — фразы ниже порога исчезают из папок и счётчиков;
+      «в Без группы» — вынимаются из кластеров и лежат внизу отдельно
       (частотность — суммарная по фразе вместе с её дублями)</div>
     </div>
     <div class="grp">
@@ -362,7 +366,7 @@ const INT_CLS = {"информационный": "ii", "коммерческое
 const TREES = {};                    // "openai_hard" -> {a,b,d}
 const state = {cols: ["openai"], mode: "hard",
                slider: 8200, minSize: 2, search: "",
-               fMinOn: false, fMin: 10, fMetric: "f",  // фильтр по частотности
+               fMode: "off", fMin: 10, fMetric: "f",   // фильтр по частотности: off|hide|nogroup
                anOn: false, anQ: [""], anFocus: null,  // режим анализа: столбцы-поиски
                cmpTpls: [],          // имена шаблонов, включённых в сравнение колонками
                targetGeo: "",        // целевой регион: его гео = «без гео»
@@ -408,7 +412,11 @@ function cutLabels(tree, k){
 function clusterize(lab){
   const map = new Map();
   for (let i = 0; i < N; i++){
-    if (state.fMinOn && (state.fMetric === "b" ? B[i] : F[i]) < state.fMin) continue;
+    if (state.fMode !== "off" && (state.fMetric === "b" ? B[i] : F[i]) < state.fMin){
+      if (state.fMode === "hide") continue;
+      map.set("f" + i, [i]);  // «в Без группы»: одиночка уйдёт под мин. размер папки
+      continue;
+    }
     let arr = map.get(lab[i]);
     if (!arr) map.set(lab[i], arr = []);
     arr.push(i);
@@ -1174,9 +1182,9 @@ async function boot(){
     state.anFocus = state.anQ.length - 1;
     savePrefs(); render();
   };
-  $("#fMinOn").addEventListener("change", e => { state.fMinOn = e.target.checked; state.sel = null; state.shown = {}; render(); });
-  $("#fMin").addEventListener("input", e => { state.fMin = Math.max(0, +e.target.value || 0); if (state.fMinOn){ state.sel = null; render(); } });
-  $("#fMetric").addEventListener("change", () => { state.fMetric = $("#fMetric").value; if (state.fMinOn){ state.sel = null; render(); } });
+  $("#fMode").addEventListener("change", () => { state.fMode = $("#fMode").value; state.sel = null; state.shown = {}; render(); });
+  $("#fMin").addEventListener("input", e => { state.fMin = Math.max(0, +e.target.value || 0); if (state.fMode !== "off"){ state.sel = null; render(); } });
+  $("#fMetric").addEventListener("change", () => { state.fMetric = $("#fMetric").value; if (state.fMode !== "off"){ state.sel = null; render(); } });
   $("#search").addEventListener("input", e => { state.search = e.target.value; state.shown = {}; savePrefs(); render(); });
   let tgTimer = null;
   $("#targetGeo").addEventListener("input", e => {
