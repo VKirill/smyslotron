@@ -32,6 +32,7 @@ const state = {cols: ["openai"], mode: "hard",
                fMode: "off", fMin: 10, fMetric: "f",   // фильтр по частотности: off|hide|nogroup
                minusWords: [],       // минус-слова: фразы с ними (в любой форме) вне кластеризации
                searchOnly: false,    // при поиске показывать в папках только совпавшие фразы
+               searchScope: "all",   // где искать: all (фразы+дубли) | name (маркер кластера)
                presSort: false,      // сортировать папки по баллам промт-оценки
                presFlt: null,        // фильтр по оценкам: {field, kind, op/num | vals[]}
                anOn: false, anQ: [""], anFocus: null,  // режим анализа: столбцы-поиски

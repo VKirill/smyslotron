@@ -77,7 +77,18 @@
   .help ul{padding-left:18px}
   .help li{margin-bottom:8px}
   /* ---------- рабочая область ---------- */
-  #work{flex:1; display:flex; min-width:0}
+  #workwrap{flex:1; display:flex; flex-direction:column; min-width:0}
+  #topbar{display:flex; gap:10px; align-items:center; padding:10px 14px;
+    border-bottom:1px solid var(--border); background:var(--panel)}
+  #topbar input[type=search]{flex:1; font-size:16px; padding:10px 14px;
+    background:var(--panel2); border:1px solid var(--border); border-radius:10px;
+    color:var(--text); outline:none}
+  #topbar input[type=search]:focus{border-color:var(--accent)}
+  #topbar select{width:auto; font-size:13.5px; padding:9px 26px 9px 10px}
+  #topbar .tbchk{display:flex; align-items:center; gap:6px; font-size:13px;
+    color:var(--muted); cursor:pointer; white-space:nowrap}
+  #topbar .tbchk input{accent-color:var(--accent)}
+  #work{flex:1; display:flex; min-width:0; min-height:0}
   #work.tworow{flex-direction:column}
   .wrow{display:flex; flex:1 1 50%; min-height:0}
   .wrow:first-child{border-bottom:2px solid var(--border)}

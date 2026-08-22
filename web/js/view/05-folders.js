@@ -154,7 +154,8 @@ function expandInto(div, c, onlyMatches, colQ){
   ql.className = "qlist";
   const sq = (colQ !== undefined ? colQ : normQ(state.search));
   let pool = c.idxs;
-  if ((onlyMatches || state.searchOnly) && sq) pool = pool.filter(i => matchQ(i, sq));
+  if ((onlyMatches || state.searchOnly) && sq && state.searchScope !== "name")
+    pool = pool.filter(i => matchQ(i, sq));
   const sorted = [...pool].sort((x, y) => {
     if (sq){
       const mx = matchQ(x, sq) ? 1 : 0, my = matchQ(y, sq) ? 1 : 0;

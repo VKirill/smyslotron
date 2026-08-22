@@ -167,6 +167,11 @@ async function boot(){
   $("#fMetric").addEventListener("change", () => { state.fMetric = $("#fMetric").value; savePrefs(); if (state.fMode !== "off"){ state.sel = null; render(); } });
   $("#search").addEventListener("input", e => { state.search = e.target.value; state.shown = {}; savePrefs(); render(); });
   $("#searchOnly").addEventListener("change", e => { state.searchOnly = e.target.checked; savePrefs(); render(); });
+  $("#searchScope").addEventListener("change", () => {
+    state.searchScope = $("#searchScope").value;
+    state.shown = {};
+    savePrefs(); render();
+  });
   let tgTimer = null;
   $("#targetGeo").addEventListener("input", e => {
     state.targetGeo = e.target.value;
@@ -203,6 +208,10 @@ async function boot(){
     $("#minusW").value = state.minusWords.join("\n");
   }
   if (prefs.searchOnly){ state.searchOnly = true; $("#searchOnly").checked = true; }
+  if (["all", "name"].includes(prefs.searchScope)){
+    state.searchScope = prefs.searchScope;
+    $("#searchScope").value = state.searchScope;
+  }
   if (["off", "hide", "nogroup"].includes(prefs.fMode)){
     state.fMode = prefs.fMode;
     state.fMin = Math.max(0, +prefs.fMin || 0);

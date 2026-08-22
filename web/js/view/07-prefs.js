@@ -37,6 +37,7 @@ function savePrefs(){ dbSet("sem_prefs:" + (PID || "demo"),
    targetGeo: state.targetGeo, mode: state.mode,
    anOn: state.anOn, anQ: state.anQ, cmpTpls: state.cmpTpls,
    minusWords: state.minusWords, searchOnly: state.searchOnly,
+   searchScope: state.searchScope,
    presSort: state.presSort, presFlt: state.presFlt,
    fMode: state.fMode, fMin: state.fMin, fMetric: state.fMetric}); }
 

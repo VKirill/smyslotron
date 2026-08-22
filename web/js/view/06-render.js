@@ -65,7 +65,8 @@ function render(){
       let clusters = col.clusters;
       let small = clusters.filter(c => c.idxs.length < minS);
       clusters = clusters.filter(c => c.idxs.length >= minS);
-      if (q) clusters = clusters.filter(c => c.idxs.some(i => matchQ(i, q)));
+      if (q) clusters = clusters.filter(c => state.searchScope === "name"
+        ? matchQ(c.top, q) : c.idxs.some(i => matchQ(i, q)));
       if (state.presSort && Object.keys(PRES).length)
         clusters = [...clusters].sort((x, y) =>
           (scoreOf(PRES[Q[y.top]]) ?? -1) - (scoreOf(PRES[Q[x.top]]) ?? -1));
@@ -162,7 +163,7 @@ function render(){
       if (smallCnt){
         const idxs = small.flatMap(cc => cc.idxs);
         let show = true, ov = 0;
-        if (q) show = idxs.some(i => matchQ(i, q));
+        if (q) show = state.searchScope === "name" ? false : idxs.some(i => matchQ(i, q));
         if (isOther && ovMap){
           const sl = new Set(small.map(cc => cc.label));
           for (const [l, cnt] of ovMap) if (sl.has(l)) ov += cnt;
@@ -175,7 +176,7 @@ function render(){
                       name: "Без группы — не объединились при текущей силе", icon: "🗂"};
           const fel = folderEl(ng, col, ov);
           fel.classList.add("nogroup");
-          const hitSearch = q && idxs.some(i => matchQ(i, q));
+          const hitSearch = q && state.searchScope !== "name" && idxs.some(i => matchQ(i, q));
           // при поиске папка остаётся внизу, но раскрыта и показывает ТОЛЬКО найденное
           if (hitSearch || state.expanded.has(key + ":__nogroup__"))
             expandInto(fel, ng, hitSearch, q);

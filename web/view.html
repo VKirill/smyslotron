@@ -8,7 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
-<link rel="stylesheet" href="css/view.css?v=2">
+<link rel="stylesheet" href="css/view.css?v=3">
 </head>
 <body>
 <header>
@@ -57,19 +57,6 @@
     </div>
     </div><!-- /pane-main -->
     <div class="tabpane" id="pane-filters">
-    <div class="grp" data-g="search">
-      <label>Поиск по фразам</label>
-      <input type="search" id="search" placeholder='[под ключ] · "купить слона" · !москве · !!аренда'>
-      <label style="display:flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; margin-top:6px">
-        <input type="checkbox" id="searchOnly"> показывать только совпавшие фразы</label>
-      <div class="hint">операторы как в Вордстате: <b>[слова]</b> — подряд и в этом
-      порядке; <b>"слова"</b> — фраза ровно из этих слов; <b>!слово</b> — ровно такая
-      форма (работает и внутри скобок/кавычек); <b>!!</b> в начале (или <b>!</b> перед
-      [ ], " ", / /) — показать НЕ соответствующие; <b>/регэксп/</b> — регулярное
-      выражение (флаги после второго
-      слэша, по умолчанию регистронезависимо). Без «!» слово ищется в любой форме
-      (по леммам)</div>
-    </div>
     <div class="grp" data-g="analysis">
       <label>Режим анализа</label>
       <label style="display:flex; align-items:center; gap:7px; font-size:13.5px; cursor:pointer">
@@ -77,7 +64,7 @@
       <button class="link" id="anAdd" style="display:none; margin-top:6px">+ добавить столбец</button>
       <div class="hint">каждый столбец — свой поиск по одной и той же кластеризации
       (первый включённый вариант): удобно следить, в какие группы попадают нужные запросы.
-      Обычный поиск слева при этом не действует</div>
+      Обычный поиск сверху при этом не действует</div>
     </div>
     <div class="grp" data-g="freq">
       <label>Фильтр по частотности</label>
@@ -239,7 +226,17 @@
     </div>
     </div><!-- /pane-prompts -->
   </aside>
-  <div id="work"></div>
+  <div id="workwrap">
+    <div id="topbar" title='Операторы как в Вордстате: [слова] — подряд и в этом порядке; "слова" — фраза ровно из этих слов; !слово — точная форма; !! в начале (или ! перед [ ], " ", / /) — показать НЕ соответствующие; /регэксп/ — регулярное выражение. Без «!» слово ищется в любой форме (по леммам)'>
+      <input type="search" id="search" placeholder='Поиск: [под ключ] · "купить слона" · !москве · !!аренда · /регэксп/'>
+      <select id="searchScope">
+        <option value="all">искать везде</option>
+        <option value="name">в названии кластера</option>
+      </select>
+      <label class="tbchk"><input type="checkbox" id="searchOnly"> только совпавшие</label>
+    </div>
+    <div id="work"></div>
+  </div>
 </main>
 <div id="selbar">
   <span>Выбрано <b id="selCnt">0</b></span>
@@ -250,15 +247,15 @@
 </div>
 <div id="loader"><div class="spin"></div><div id="loadmsg">Загрузка данных…</div></div>
 
-<script src="js/view/01-core.js?v=1"></script>
+<script src="js/view/01-core.js?v=2"></script>
 <script src="js/view/02-exclusions.js?v=3"></script>
 <script src="js/view/03-clusterize.js?v=1"></script>
 <script src="js/view/04-search.js?v=1"></script>
-<script src="js/view/05-folders.js?v=3"></script>
-<script src="js/view/06-render.js?v=1"></script>
-<script src="js/view/07-prefs.js?v=1"></script>
+<script src="js/view/05-folders.js?v=4"></script>
+<script src="js/view/06-render.js?v=2"></script>
+<script src="js/view/07-prefs.js?v=2"></script>
 <script src="js/view/08-export.js?v=1"></script>
 <script src="js/view/09-prompts.js?v=1"></script>
-<script src="js/view/10-boot.js?v=1"></script>
+<script src="js/view/10-boot.js?v=2"></script>
 </body>
 </html>
