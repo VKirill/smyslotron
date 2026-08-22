@@ -262,7 +262,10 @@ async function startUpload(files, appendPid){
       // шаблон только подставляет колонки, решение за пользователем
       const res = await new Promise(done => openMapper(up, appendPid || null, done));
       if (res === null) break;                 // отмена — прерываем очередь
-      if (res){ results.push(`${f.name}: ${res}`); okCount++; }
+      if (res && typeof res === "object"){
+        results.push(`${f.name}: ${res.msg}`);
+        if (res.ok) okCount++;                 // «изменений нет» не запускает пересчёт
+      } else if (res){ results.push(`${f.name}: ${res}`); okCount++; }
     }catch(e){ loading(false); results.push(`${f.name}: ошибка — ${e.message}`); }
   }
   if (appendPid && (results.length || okCount)){
@@ -375,9 +378,12 @@ function openMapper(up, appendPid, done){
            body: JSON.stringify(mapping)});
         m.remove();
         refreshList();
-        done(r.freq_only
-          ? `обновлены частоты у ${r.merged.toLocaleString("ru-RU")} фраз${r.ignored_new ? `, новых проигнорировано ${r.ignored_new.toLocaleString("ru-RU")}` : ""}`
-          : `+${r.added.toLocaleString("ru-RU")} новых, дублей ${r.merged.toLocaleString("ru-RU")} (итого ${r.rows.toLocaleString("ru-RU")})`);
+        done(r.no_change
+          ? {msg: "изменений нет — эти фразы с этими же цифрами уже в проекте", ok: false}
+          : {msg: r.freq_only
+              ? `обновлены частоты у ${r.merged.toLocaleString("ru-RU")} фраз${r.ignored_new ? `, новых проигнорировано ${r.ignored_new.toLocaleString("ru-RU")}` : ""}`
+              : `+${r.added.toLocaleString("ru-RU")} новых, дублей ${r.merged.toLocaleString("ru-RU")} (итого ${r.rows.toLocaleString("ru-RU")})`,
+             ok: true});
         loading(false);
         return;
       } else {
