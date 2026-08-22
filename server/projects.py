@@ -171,18 +171,24 @@ async def append_project(pid: str, request: Request,
             existing.append(item)
             index[q.lower()] = item
 
+    # freq_only: обновить ТОЛЬКО частотности существующих фраз (перезапись значений),
+    # новые фразы не добавлять — состав неизменен, эмбеддинги и деревья остаются в силе
+    freq_only = bool(body.get("freq_only"))
     added = merged_cnt = 0
     for (q, b, e, v, t, w) in new_rows:
         k = q.lower()
         it = index.get(k)
         if it:
-            it[1] = max(it[1], b)
-            it[2] = max(it[2], e)
-            it[3] = max(it[3], v)
-            it[4] = "1" if it[4] == "1" or t == "1" else "0"
-            it[5] = "1" if it[5] == "1" or w == "1" else "0"
+            if freq_only:
+                it[1], it[2], it[3] = b, e, v
+            else:
+                it[1] = max(it[1], b)
+                it[2] = max(it[2], e)
+                it[3] = max(it[3], v)
+                it[4] = "1" if it[4] == "1" or t == "1" else "0"
+                it[5] = "1" if it[5] == "1" or w == "1" else "0"
             merged_cnt += 1
-        else:
+        elif not freq_only:
             item = [q, b, e, v, t, w]
             existing.append(item)
             index[k] = item
@@ -196,14 +202,17 @@ async def append_project(pid: str, request: Request,
                      "Очень точная частотность", "Топоним", "Вопрос"])
         w2.writerows(existing)
 
-    # устаревшие деревья и meta — снести, чтобы «пропуск готовых» их не переиспользовал
-    ddir = pdir / "data"
-    if ddir.exists():
-        for fb in ddir.glob("*.bin"):
-            fb.unlink(missing_ok=True)
-        (ddir / "meta.json").unlink(missing_ok=True)
+    # устаревшие деревья и meta — снести, чтобы «пропуск готовых» их не переиспользовал;
+    # при freq_only состав фраз не менялся — деревья остаются, прогон только
+    # пере-генерит queries.json с новыми суммами (бесплатно, всё из кэшей)
+    if not freq_only:
+        ddir = pdir / "data"
+        if ddir.exists():
+            for fb in ddir.glob("*.bin"):
+                fb.unlink(missing_ok=True)
+            (ddir / "meta.json").unlink(missing_ok=True)
 
-    entry = f"{time.strftime('%F')} +{added}"
+    entry = f"{time.strftime('%F')} " + (f"частоты×{merged_cnt}" if freq_only else f"+{added}")
     # defer_run: при мультизагрузке очередь ставится одним /run после последнего файла,
     # иначе воркер может стартовать между файлами и второй append упрётся в running
     status_sql = "" if body.get("defer_run") else "status='queued', task='cluster', "
@@ -212,7 +221,9 @@ async def append_project(pid: str, request: Request,
                   "error='', retries=0, history=CASE WHEN history='' THEN ? "
                   "ELSE history || ' · ' || ? END WHERE id=?",
                   (len(existing), entry, entry, pid))
-    return {"added": added, "merged": merged_cnt, "rows": len(existing)}
+    return {"added": added, "merged": merged_cnt, "rows": len(existing),
+            "freq_only": freq_only,
+            "ignored_new": len(new_rows) - merged_cnt - added if freq_only else 0}
 
 
 @router.delete("/projects/{pid}")

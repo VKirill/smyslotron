@@ -290,6 +290,7 @@ function openMapper(up, appendPid, done){
         ${Object.keys(DELIM_NAME).map(d => `<option value="${d === "\t" ? "TAB" : d}" ${d === sel.delimiter ? "selected" : ""}>${DELIM_NAME[d]}</option>`).join("")}
       </select></div>
       <label class="chk"><input type="checkbox" id="mHdr" ${sel.has_header ? "checked" : ""}> первая строка — заголовки</label>
+      ${appendPid ? `<label class="chk" title="Частотности совпавших фраз перезаписываются значениями из файла; новые фразы игнорируются; эмбеддинги и деревья не пересчитываются — только быстрое обновление данных"><input type="checkbox" id="mFreqOnly"> только обновить частотности (без новых фраз и эмбеддингов)</label>` : ""}
     </div>
     <div style="color:var(--muted); font-size:12.5px; margin-bottom:8px">
       Назначь колонки в шапке таблицы: <b style="color:var(--text)">Запрос</b> — обязательно.
@@ -366,6 +367,7 @@ function openMapper(up, appendPid, done){
           delimiter: sel.delimiter, has_header: sel.has_header,
           query_col: sel.query, base_col: sel.base, exact_col: sel.exact,
           vexact_col: sel.vexact, topo_col: sel.topo, ques_col: sel.ques,
+          freq_only: !!(appendPid && m.querySelector("#mFreqOnly") && m.querySelector("#mFreqOnly").checked),
           defer_run: !!appendPid};
       if (appendPid){
         const r = await api(`projects/${appendPid}/append`,
@@ -373,7 +375,9 @@ function openMapper(up, appendPid, done){
            body: JSON.stringify(mapping)});
         m.remove();
         refreshList();
-        done(`+${r.added.toLocaleString("ru-RU")} новых, дублей ${r.merged.toLocaleString("ru-RU")} (итого ${r.rows.toLocaleString("ru-RU")})`);
+        done(r.freq_only
+          ? `обновлены частоты у ${r.merged.toLocaleString("ru-RU")} фраз${r.ignored_new ? `, новых проигнорировано ${r.ignored_new.toLocaleString("ru-RU")}` : ""}`
+          : `+${r.added.toLocaleString("ru-RU")} новых, дублей ${r.merged.toLocaleString("ru-RU")} (итого ${r.rows.toLocaleString("ru-RU")})`);
         loading(false);
         return;
       } else {
