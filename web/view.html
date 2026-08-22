@@ -54,7 +54,8 @@
     background-repeat:no-repeat; background-position:right 9px center}
   select option{background:var(--panel2); color:var(--text)}
   input:focus,select:focus{border-color:var(--accent)}
-  .stats{border-top:1px solid var(--border); padding-top:12px; font-size:13.5px;
+  .stats{border-top:1px solid var(--border); border-bottom:1px solid var(--border);
+    padding:10px 0; margin-bottom:18px; font-size:13.5px;
     display:grid; grid-template-columns:1fr auto; gap:4px 8px}
   .stats span:nth-child(even){text-align:right; color:var(--text); font-variant-numeric:tabular-nums}
   .stats span:nth-child(odd){color:var(--muted)}
@@ -201,6 +202,7 @@
       <input type="range" id="slider" min="0" max="10000" value="8200">
       <div class="row"><span>порог сходства: <b id="thr">—</b></span><span>папок: <b id="ncl">—</b></span></div>
     </div>
+    <div class="stats" id="stats"></div>
     <div class="grp">
       <label>Мин. фраз в папке</label>
       <input type="number" id="minSize" min="1" value="2">
@@ -240,7 +242,6 @@
       <div class="hint">синонимы региона через запятую: их слова вычитаются из гео фразы —
       «дома под ключ в москве и мо» склеится с «дома под ключ», а Казань останется отдельно</div>
     </div>
-    <div class="stats" id="stats"></div>
     <details class="help">
       <summary>Как это работает</summary>
       <p>Каждая фраза превращена в <b>эмбеддинг</b> — числовой «слепок смысла» от языковой
@@ -455,8 +456,9 @@ async function getCols(){
       const tree = await loadTree(p + "_" + t.mode);
       const k = kFromSlider(t.slider);
       const lab = cutLabels(tree, k);
-      cols.push({prov: p, tree, k, clusters: clusterize(lab), lab,
-                 q: (t.search || "").trim().toLowerCase(),
+      // сохранённый в шаблоне поиск НЕ применяем: колонка сравнения показывает
+      // полную кластеризацию, иначе чужой поиск из шаблона «прячет» все папки
+      cols.push({prov: p, tree, k, clusters: clusterize(lab), lab, q: "",
                  key: "t#" + ci, tpl: t, minSize: t.minSize || 1});
     }
     return cols;
@@ -646,6 +648,10 @@ function render(){
         clusters.sort((x, y) => (ovMap.get(y.label)) - (ovMap.get(x.label)));
       }
       const smallCnt = small.reduce((s, c) => s + c.idxs.length, 0);
+      // счёт папок «один к одному»: мелкие группы из «Без группы» — тоже папки
+      const nSmallF = q ? small.filter(cc => cc.idxs.some(i => matchQ(i, q))).length : small.length;
+      const nFolders = clusters.length + nSmallF;
+      const cntHtml = `<span title="${fmt(clusters.length)} групп + ${fmt(nSmallF)} в «Без группы»">${fmt(nFolders)} папок</span>`;
 
       const head = document.createElement("div");
       head.className = "colhead";
@@ -653,7 +659,7 @@ function render(){
         // сравнение шаблонов: заголовок = имя шаблона и его настройки
         head.innerHTML = `<span title="${esc(tplLabel(col.tpl))}"><b>${esc(col.tpl.name)}</b>
             <span style="font-size:11px">${esc(tplLabel(col.tpl))}</span></span>
-          <span class="ancnt">${fmt(clusters.length)} папок</span>
+          <span class="ancnt">${cntHtml}</span>
           <button class="andel" title="Убрать из сравнения">×</button>`;
         head.querySelector(".andel").onclick = () => {
           state.cmpTpls = state.cmpTpls.filter(n => n !== col.tpl.name);
@@ -663,7 +669,7 @@ function render(){
         // режим анализа: вместо названия варианта — поле поиска колонки
         head.innerHTML = `<input class="anq" placeholder="запросы для отслеживания…"
             value="${esc(col.anq || "").replace(/"/g, "&quot;")}">
-          <span class="ancnt">${fmt(clusters.length)} папок</span>
+          <span class="ancnt">${cntHtml}</span>
           ${state.anQ.length > 1 ? `<button class="andel" title="Убрать столбец">×</button>` : ""}`;
         const inp = head.querySelector(".anq");
         inp.addEventListener("input", () => {
@@ -680,7 +686,7 @@ function render(){
         };
       } else {
         head.innerHTML = `<span><b>${titleOf(col.prov)}</b></span>
-          <span>${fmt(clusters.length)} папок${isOther && ovMap ? " с общими фразами" : ""}
+          <span>${isOther && ovMap ? `${fmt(clusters.length)} папок с общими фразами` : cntHtml}
           ${isAB() && state.sel && col.prov === state.sel.col ? ` · <button class="link" id="resetSel">сбросить выбор</button>` : ""}</span>`;
       }
       el.appendChild(head);
@@ -813,7 +819,7 @@ function renderTpls(){
       JSON.stringify(t.cols) === JSON.stringify(state.cols);
     const row = document.createElement("div");
     row.className = "tpl" + (active ? " on" : "");
-    row.innerHTML = `<input type="checkbox" class="tcmp" title="Показать шаблон колонкой (отметь несколько — сравнишь)"
+    row.innerHTML = `<input type="checkbox" class="tcmp" title="Показать шаблон колонкой (отметь несколько — сравнишь). Сохранённый в шаблоне поиск в колонке не применяется"
         ${state.cmpTpls.includes(t.name) ? "checked" : ""}>
       <span class="tname" title="${esc(tplLabel(t))}">${esc(t.name)}</span>
       <span class="tinfo">${esc(tplLabel(t))}</span>
