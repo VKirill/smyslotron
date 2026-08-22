@@ -147,6 +147,16 @@
   .q{display:flex; gap:8px; padding:2.5px 0; font-size:13px}
   .q .qt{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
   .q .qf{color:var(--muted); font-size:12px; flex:none; font-variant-numeric:tabular-nums}
+  .q .qsel{flex:none; accent-color:var(--accent); cursor:pointer; margin:0; width:13px; height:13px}
+  #selbar{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); z-index:8;
+    background:var(--panel2); border:1px solid var(--accent); border-radius:12px;
+    padding:9px 14px; display:none; gap:9px; align-items:center;
+    box-shadow:0 12px 44px rgba(0,0,0,.55); font-size:13.5px}
+  #selbar.on{display:flex}
+  #selbar button{background:var(--panel); border:1px solid var(--border); border-radius:8px;
+    color:var(--text); cursor:pointer; padding:6px 11px; font-size:13px; font-family:inherit}
+  #selbar button:hover{border-color:var(--accent)}
+  #selbar b{color:var(--accent)}
   .q mark{background:var(--hl); color:var(--accent); border-radius:3px; padding:0 1px}
   .q .se{flex:none; display:inline-flex; gap:4px; opacity:0; transition:opacity .12s}
   .q:hover .se{opacity:1}
@@ -280,10 +290,11 @@
     </div>
     <div class="grp">
       <label>Минус-слова</label>
-      <input type="search" id="minusW" placeholder="кухня, спальня, б/у">
-      <div class="hint">через запятую; фразы с этими словами <b>в любой форме</b>
-      (по леммам: «кухня» поймает и «кухни», и «кухней») полностью убираются из
-      кластеризации. Исключено фраз: <b id="minusCnt">0</b></div>
+      <textarea id="minusW" rows="3" placeholder="кухня, спальня&#10;кухня стиль" style="width:100%; padding:7px 9px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:14px; font-family:inherit; outline:none; resize:vertical"></textarea>
+      <div class="hint">через запятую или с новой строки; слово ловит любую форму
+      (по леммам: «кухня» поймает и «кухни»). Запись из нескольких слов —
+      «кухня стиль» — минусует фразу, где встречаются <b>все</b> эти слова в любом
+      порядке. Исключено фраз: <b id="minusCnt">0</b></div>
     </div>
     <div class="grp">
       <label>Корзина <span id="trashCnt" style="color:var(--muted)"></span>
@@ -291,6 +302,13 @@
       <div class="hint">фразы из корзины не участвуют в кластеризации; 🗑 у фразы —
       убрать, клик по фразе ниже — вернуть</div>
       <div id="trashList" style="max-height:180px; overflow-y:auto; font-size:12.5px; margin-top:6px"></div>
+    </div>
+    <div class="grp">
+      <label>Правила связок</label>
+      <div class="hint">создаются из выделения (галочки у фраз → панель внизу):
+      <b>🔗 вместе</b> — папки участников склеиваются при любой силе;
+      <b>⛓ врозь</b> — участники никогда не окажутся в одной папке. Клик по правилу — удалить</div>
+      <div id="rulesList" style="max-height:180px; overflow-y:auto; font-size:12.5px; margin-top:6px"></div>
     </div>
     </div><!-- /pane-filters -->
     <div class="tabpane" id="pane-tpls">
@@ -367,6 +385,13 @@
   </aside>
   <div id="work"></div>
 </main>
+<div id="selbar">
+  <span>Выбрано <b id="selCnt">0</b></span>
+  <button id="selTrash" title="Отправить выбранные фразы в корзину">🗑 В корзину</button>
+  <button id="selMust" title="Эти фразы всегда будут в одной папке (папки склеиваются принудительно при любой силе)">🔗 Вместе</button>
+  <button id="selNot" title="Эти фразы никогда не окажутся в одной папке (слияние, которое их объединило бы, пропускается)">⛓ Врозь</button>
+  <button id="selClear" title="Снять выделение">✕</button>
+</div>
 <div id="loader"><div class="spin"></div><div id="loadmsg">Загрузка данных…</div></div>
 
 <script>
@@ -434,10 +459,45 @@ function cutLabels(tree, k){
                       while (uf[x] !== r){ const nx = uf[x]; uf[x] = r; x = nx; } return r; };
   const rep = new Int32Array(N + k);
   for (let i = 0; i < N; i++) rep[i] = i;
+  // правила «никогда вместе»: корень -> Set(id правил), конфликтные слияния пропускаются
+  const notOf = new Map();
+  for (let r = 0; r < RULES.not.length; r++)
+    for (const t of RULES.not[r]){
+      const i = QIDX.get(t);
+      if (i === undefined) continue;
+      let s = notOf.get(i);
+      if (!s) notOf.set(i, s = new Set());
+      s.add(r);
+    }
+  const conflict = (ra, rb) => {
+    const A = notOf.get(ra), Bs = notOf.get(rb);
+    if (!A || !Bs) return false;
+    for (const r of A) if (Bs.has(r)) return true;
+    return false;
+  };
   for (let i = 0; i < k; i++){
     const ra = find(rep[tree.a[i]]), rb = find(rep[tree.b[i]]);
+    if (ra !== rb && conflict(ra, rb)){ rep[N + i] = ra; continue; }
     uf[rb] = ra;
+    const Bs = notOf.get(rb);
+    if (Bs){
+      const A = notOf.get(ra);
+      if (!A) notOf.set(ra, Bs);
+      else for (const r of Bs) A.add(r);
+      notOf.delete(rb);
+    }
     rep[N + i] = ra;
+  }
+  // правила «всегда вместе»: принудительно склеить папки участников
+  for (const g of RULES.must){
+    let first = -1;
+    for (const t of g){
+      const i = QIDX.get(t);
+      if (i === undefined) continue;
+      const r2 = find(i);
+      if (first < 0) first = r2;
+      else if (r2 !== first) uf[r2] = first;
+    }
   }
   const lab = new Int32Array(N);
   for (let i = 0; i < N; i++) lab[i] = find(i);
@@ -447,15 +507,51 @@ function cutLabels(tree, k){
 /* ---------- корзина и минус-слова: полное исключение из кластеризации ---------- */
 let TRASH = new Set();  // тексты фраз в корзине (persist: sem_trash:<pid>)
 function saveTrash(){ dbSet("sem_trash:" + (PID || "demo"), [...TRASH]); }
+let RULES = {must: [], not: []};   // правила связок (persist: sem_rules:<pid>)
+let QIDX = new Map();              // текст фразы -> индекс
+let SELQ = new Set();              // выделенные галочками фразы (тексты)
+function saveRules(){ dbSet("sem_rules:" + (PID || "demo"), RULES); }
+let _mwCache = {key: "", parsed: []};
+function _mwParsed(){
+  const key = state.minusWords.join("|");
+  if (_mwCache.key !== key)
+    _mwCache = {key, parsed: state.minusWords.map(e => e.split(/\s+/).filter(Boolean))};
+  return _mwCache.parsed;
+}
 function minusHit(i){
-  if (!state.minusWords.length) return false;
+  const entries = _mwParsed();
+  if (!entries.length) return false;
   const raw = Q[i].toLowerCase().split(/\s+/);
   const lem = L && L[i] ? L[i].split(/\s+/) : null;
-  for (const w of state.minusWords)
-    if (raw.includes(w) || (lem && lem.includes(w))) return true;
+  // запись из нескольких слов («кухня стиль») минусует фразу, если ВСЕ слова
+  // встречаются в ней — в любом месте и любой форме (по леммам)
+  for (const words of entries)
+    if (words.every(w => raw.includes(w) || (lem && lem.includes(w)))) return true;
   return false;
 }
 function excluded(i){ return TRASH.has(Q[i]) || minusHit(i); }
+
+function updateSelBar(){
+  $("#selbar").classList.toggle("on", SELQ.size > 0);
+  $("#selCnt").textContent = SELQ.size;
+}
+function renderRules(){
+  const el = $("#rulesList");
+  if (!el) return;
+  const rows = [];
+  RULES.must.forEach((g, i) => rows.push({icon: "🔗", g, kind: "must", i}));
+  RULES.not.forEach((g, i) => rows.push({icon: "⛓", g, kind: "not", i}));
+  el.innerHTML = rows.length ? "" : '<div style="color:var(--muted)">правил пока нет</div>';
+  for (const r of rows){
+    const d = document.createElement("div");
+    d.className = "q";
+    d.style.cursor = "pointer";
+    d.title = r.g.join("\n") + "\n\nКлик — удалить правило";
+    d.innerHTML = `<span class="qt">${r.icon} ${esc(r.g[0])} + ${r.g.length > 2 ? `ещё ${r.g.length - 1}` : esc(r.g[1] || "")}</span><span class="qf">×</span>`;
+    d.onclick = () => { RULES[r.kind].splice(r.i, 1); saveRules(); render(); };
+    el.appendChild(d);
+  }
+}
 
 function clusterize(lab){
   const map = new Map();
@@ -738,9 +834,17 @@ function expandInto(div, c, onlyMatches, colQ){
     const mk = (W && W[i] ? " ❓" : "") + (G && G[i] ? " 📍" : "");
     const eq = encodeURIComponent(Q[i]);
     const se = `<span class="se"><a class="ya" href="https://yandex.ru/search/?text=${eq}" target="_blank" rel="noopener" title="Выдача Яндекса">Я</a><a class="go" href="https://www.google.com/search?q=${eq}" target="_blank" rel="noopener" title="Выдача Google">G</a><a class="tr" data-i="${i}" title="В корзину — исключить из кластеризации">🗑</a></span>`;
-    return `<div class="q"><span class="qt">${ib}${hi(Q[i], q)}${mk}${dd}</span>${se}<span class="qf">${fmt(F[i])}</span></div>`;
+    return `<div class="q"><input type="checkbox" class="qsel" data-i="${i}"${SELQ.has(Q[i]) ? " checked" : ""}><span class="qt">${ib}${hi(Q[i], q)}${mk}${dd}</span>${se}<span class="qf">${fmt(F[i])}</span></div>`;
   }).join("") + (sorted.length > CAP ? `<div class="q"><span class="qt" style="color:var(--muted)">… ещё ${fmt(sorted.length - CAP)}</span></div>` : "");
   ql.addEventListener("click", e => {
+    const cb = e.target.closest(".qsel");
+    if (cb){
+      e.stopPropagation();
+      const t = Q[+cb.dataset.i];
+      if (cb.checked) SELQ.add(t); else SELQ.delete(t);
+      updateSelBar();
+      return;
+    }
     const tr = e.target.closest(".tr");
     if (!tr) return;
     e.preventDefault(); e.stopPropagation();
@@ -950,7 +1054,8 @@ function render(){
     // зелёная точка на табе «Фильтры», если хоть один фильтр активен
     $("#tabFilters").classList.toggle("dot",
       !!(state.search.trim() || state.fMode !== "off" || state.targetGeo.trim() ||
-         state.anOn || state.minusWords.length || TRASH.size));
+         state.anOn || state.minusWords.length || TRASH.size ||
+         RULES.must.length || RULES.not.length));
     // счётчики минус-слов и корзины + список корзины
     let mc = 0;
     if (state.minusWords.length) for (let i = 0; i < N; i++) if (minusHit(i)) mc++;
@@ -965,6 +1070,7 @@ function render(){
         if (k < items.length) el.onclick = () => { TRASH.delete(items[k]); saveTrash(); render(); };
       });
     }
+    renderRules();
     renderTpls();
   });
 }
@@ -1212,6 +1318,7 @@ async function boot(){
     if (ir.ok) INT = (await ir.json()).i;
   }catch(e){}
   Q = qd.q; F = qd.f; B = qd.b; D = qd.d || null; G = qd.g || null; W = qd.w || null; L = qd.l || null; N = Q.length; TOTAL = qd.total || N;
+  QIDX = new Map(Q.map((t, i) => [t, i]));
 
   // варианты эмбеддингов: галочки, до 3 колонок одновременно
   state.cols = [META.provs.includes("openai") ? "openai" : META.provs[0]];
@@ -1270,11 +1377,27 @@ async function boot(){
     state.anFocus = state.anQ.length - 1;
     savePrefs(); render();
   };
+  $("#selTrash").onclick = () => {
+    for (const t of SELQ) TRASH.add(t);
+    SELQ.clear(); saveTrash(); updateSelBar(); render();
+  };
+  $("#selMust").onclick = () => {
+    if (SELQ.size < 2){ alert("Выбери минимум две фразы"); return; }
+    RULES.must.push([...SELQ]);
+    SELQ.clear(); saveRules(); updateSelBar(); render();
+  };
+  $("#selNot").onclick = () => {
+    if (SELQ.size < 2){ alert("Выбери минимум две фразы"); return; }
+    RULES.not.push([...SELQ]);
+    SELQ.clear(); saveRules(); updateSelBar(); render();
+  };
+  $("#selClear").onclick = () => { SELQ.clear(); updateSelBar(); render(); };
+
   let mwT;
   $("#minusW").addEventListener("input", e => {
     clearTimeout(mwT);
     mwT = setTimeout(() => {
-      state.minusWords = e.target.value.toLowerCase().split(",").map(w => w.trim()).filter(Boolean);
+      state.minusWords = e.target.value.toLowerCase().split(/[,\n]/).map(w => w.trim()).filter(Boolean);
       state.sel = null; state.shown = {};
       savePrefs(); render();
     }, 350);
@@ -1324,6 +1447,8 @@ async function boot(){
     $("#minusW").value = state.minusWords.join(", ");
   }
   TRASH = new Set((await dbGet("sem_trash:" + (PID || "demo"))) || []);
+  const rl = await dbGet("sem_rules:" + (PID || "demo"));
+  if (rl && Array.isArray(rl.must) && Array.isArray(rl.not)) RULES = rl;
   if (prefs.anOn){
     state.anOn = true;
     $("#anOn").checked = true;
