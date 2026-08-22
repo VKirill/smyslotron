@@ -178,6 +178,7 @@
   .badge.geo{color:var(--warn); border-color:var(--warn)}
   .badge.qb{color:var(--accent); border-color:var(--accent)}
   .badge.int{font-weight:700}
+  .badge.pres{color:var(--accent2, #38c793); border-color:var(--accent2, #38c793); cursor:help}
   .badge.int.ii,.pint.ii{color:#5b8cff; border-color:#5b8cff}
   .badge.int.ik,.pint.ik{color:#e5a93d; border-color:#e5a93d}
   .badge.int.it,.pint.it{color:#38c793; border-color:#38c793}
@@ -219,6 +220,7 @@
       <button data-v="main" class="on">Основные</button>
       <button data-v="filters" id="tabFilters">Фильтры</button>
       <button data-v="tpls">Шаблоны</button>
+      <button data-v="prompts">Промты</button>
     </div>
     <div class="tabpane on" id="pane-main">
     <div class="grp">
@@ -389,6 +391,33 @@
       <div id="tplList"></div>
     </div>
     </div><!-- /pane-tpls -->
+    <div class="tabpane" id="pane-prompts">
+    <div class="grp">
+      <label>Сохранённые промты</label>
+      <select id="prSel"><option value="">— новый промт —</option></select>
+      <div style="display:flex; gap:7px; margin-top:6px">
+        <button class="link" id="prSave">сохранить промт</button>
+        <button class="link" id="prDel" style="color:var(--err, #e05d5d)">удалить</button>
+      </div>
+    </div>
+    <div class="grp">
+      <label>Промт (что оценивать)</label>
+      <textarea id="prText" rows="7" style="width:100%; padding:7px 9px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:13px; font-family:inherit; outline:none; resize:vertical"></textarea>
+    </div>
+    <div class="grp">
+      <label>Формат ответа (JSON)</label>
+      <textarea id="prSchema" rows="4" style="width:100%; padding:7px 9px; background:var(--panel2); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:13px; font-family:inherit; outline:none; resize:vertical"></textarea>
+      <div class="hint">поле <b>score</b> (число) покажется бейджем ⚙ на папке;
+      весь JSON — в тултипе бейджа</div>
+    </div>
+    <div class="grp">
+      <button class="csvbtn" id="prRun" style="display:block; width:100%; text-align:center; background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; padding:8px">▶ Прогнать по папкам среза</button>
+      <label style="display:flex; align-items:center; gap:7px; font-size:13px; cursor:pointer; margin-top:8px">
+        <input type="checkbox" id="presSort"> сортировать папки по баллам</label>
+      <div class="hint" id="prProg">оцениваются только сформированные папки текущего среза
+      (≥ мин. размера); «Без группы» не участвует. В группу передаются топ-10 фраз</div>
+    </div>
+    </div><!-- /pane-prompts -->
   </aside>
   <div id="work"></div>
 </main>
@@ -435,6 +464,7 @@ const state = {cols: ["openai"], mode: "hard",
                fMode: "off", fMin: 10, fMetric: "f",   // фильтр по частотности: off|hide|nogroup
                minusWords: [],       // минус-слова: фразы с ними (в любой форме) вне кластеризации
                searchOnly: false,    // при поиске показывать в папках только совпавшие фразы
+               presSort: false,      // сортировать папки по баллам промт-оценки
                anOn: false, anQ: [""], anFocus: null,  // режим анализа: столбцы-поиски
                cmpTpls: [],          // имена шаблонов, включённых в сравнение колонками
                targetGeo: "",        // целевой регион: его гео = «без гео»
@@ -516,6 +546,14 @@ function cutLabels(tree, k){
 let TRASH = new Set();  // тексты фраз в корзине (persist: sem_trash:<pid>)
 function saveTrash(){ dbSet("sem_trash:" + (PID || "demo"), [...TRASH]); }
 let RULES = {must: [], not: []};   // правила связок (persist: sem_rules:<pid>)
+let PRES = {};                     // результаты промт-оценки: маркер папки -> объект
+let PRLIB = [];                    // сохранённые промты: [{name, prompt, schema}]
+function scoreOf(r){
+  if (!r || typeof r !== "object") return null;
+  if (typeof r.score === "number") return r.score;
+  for (const v of Object.values(r)) if (typeof v === "number") return v;
+  return null;
+}
 let QIDX = new Map();              // текст фразы -> индекс
 let SELQ = new Set();              // выделенные галочками фразы (тексты)
 function saveRules(){ dbSet("sem_rules:" + (PID || "demo"), RULES); }
@@ -814,6 +852,7 @@ function folderEl(c, col, overlap){
       ${c.dom ? `<span class="badge int ${INT_CLS[c.dom] || ""}${c.mixed ? " mx" : ""}" title="Интент кластера: ${esc(c.dom)}${c.mixed ? " (смешанный — есть второй интент ≥25%)" : ""}">${INT_SHORT[c.dom] || "?"}${c.mixed ? "⚠" : ""}</span>` : ""}
       ${c.geo ? `<span class="badge geo" title="Гео-кластер">📍 ${esc(c.geo)}</span>` : ""}
       ${c.qn ? `<span class="badge qb" title="Вопросных фраз">❓ ${Math.round(c.qn / c.idxs.length * 100)}%</span>` : ""}
+      ${PRES[Q[c.top]] !== undefined ? `<span class="badge pres" title="${esc(JSON.stringify(PRES[Q[c.top]], null, 1))}">⚙ ${scoreOf(PRES[Q[c.top]]) ?? "✓"}</span>` : ""}
       ${isAB() && !state.anOn && !col.tpl ? `<button class="cmp" title="Найти эти фразы в соседней колонке">⇄</button>` : ""}
       <button class="copy" title="Скопировать уникальные фразы кластера (без дублей)">⧉</button>
       ${overlap ? `<span class="badge ov">${overlap} общ.</span>` : ""}
@@ -976,6 +1015,9 @@ function render(){
       let small = clusters.filter(c => c.idxs.length < minS);
       clusters = clusters.filter(c => c.idxs.length >= minS);
       if (q) clusters = clusters.filter(c => c.idxs.some(i => matchQ(i, q)));
+      if (state.presSort && Object.keys(PRES).length)
+        clusters = [...clusters].sort((x, y) =>
+          (scoreOf(PRES[Q[y.top]]) ?? -1) - (scoreOf(PRES[Q[x.top]]) ?? -1));
       if (isOther && ovMap){
         clusters = clusters.filter(c => ovMap.has(c.label));
         clusters.sort((x, y) => (ovMap.get(y.label)) - (ovMap.get(x.label)));
@@ -1175,6 +1217,7 @@ function savePrefs(){ dbSet("sem_prefs:" + (PID || "demo"),
    targetGeo: state.targetGeo, mode: state.mode,
    anOn: state.anOn, anQ: state.anQ, cmpTpls: state.cmpTpls,
    minusWords: state.minusWords, searchOnly: state.searchOnly,
+   presSort: state.presSort,
    fMode: state.fMode, fMin: state.fMin, fMetric: state.fMetric}); }
 
 // ---------- шаблоны фильтров ----------
@@ -1273,7 +1316,8 @@ async function exportSlice(){
     if (c.idxs.length < state.minSize){ noGroup.push(...c.idxs); continue; }
     ncl++;
     const name = Q[c.top];
-    markers.push([name, c.sum, c.idxs.length, c.dom || ""]);
+    markers.push([name, c.sum, c.idxs.length, c.dom || "",
+                  PRES[name] !== undefined ? (scoreOf(PRES[name]) ?? JSON.stringify(PRES[name]).slice(0, 100)) : ""]);
     for (const i of [...c.idxs].sort((x, y) => F[y] - F[x])){
       lines.push([Q[i], F[i], B[i], (D && D[i] ? D[i].join(" | ") : ""),
                   (G && G[i]) || "", (W && W[i]) ? "да" : "",
@@ -1319,12 +1363,12 @@ async function exportSlice(){
   XLSX.utils.book_append_sheet(wb, ws1, "Кластеры");
 
   const ws2 = XLSX.utils.aoa_to_sheet(
-    [["Маркерный запрос", "Σ частотность", "Фраз", "Интент кластера"], ...markers]);
-  ws2["!cols"] = [{wch: 52}, {wch: 15}, {wch: 9}, {wch: 24}];
+    [["Маркерный запрос", "Σ частотность", "Фраз", "Интент кластера", "Оценка промта"], ...markers]);
+  ws2["!cols"] = [{wch: 52}, {wch: 15}, {wch: 9}, {wch: 24}, {wch: 16}];
   ws2["!rows"] = [{hpt: 30}];
-  ws2["!autofilter"] = {ref: "A1:D" + (markers.length + 1)};
+  ws2["!autofilter"] = {ref: "A1:E" + (markers.length + 1)};
   for (let r = 0; r <= markers.length; r++){
-    for (let c = 0; c < 4; c++){
+    for (let c = 0; c < 5; c++){
       const cell = ws2[XLSX.utils.encode_cell({r, c})];
       if (!cell) continue;
       if (r === 0){ cell.s = {...HDR_S, fill: {patternType: "solid", fgColor: {rgb: "2E9E74"}}}; continue; }
@@ -1340,6 +1384,70 @@ async function exportSlice(){
   const modeName = {hard: "hard", avg: "avg", soft: "soft"}[state.mode];
   XLSX.writeFile(wb, `srez_${vkey}_${modeName}_${(state.slider / 100).toFixed(1)}pct.xlsx`,
                  {compression: true});
+}
+
+/* ---------- прогон пользовательского промта по папкам среза ---------- */
+const DEFAULT_PROMPT = {
+  name: "Инструментность (0–100)",
+  prompt: `[удалено — личный промт]
+
+[удалено]
+[удалено]
+[удалено]
+
+[удалено]`,
+  schema: `{"score": <0-100>, "tool": "<короткое название инструмента или ->", "why": "<одна фраза почему>"}`
+};
+
+async function runPromptEval(){
+  const prompt = $("#prText").value.trim();
+  if (!prompt){ alert("Напиши промт"); return; }
+  const {clusters} = await sliceClusters();
+  const list = clusters.filter(c => c.idxs.length >= state.minSize).slice(0, 1000);
+  if (!list.length){ alert("В текущем срезе нет сформированных папок"); return; }
+  if (!confirm(`Прогнать промт по ${list.length.toLocaleString("ru-RU")} папкам через DeepSeek?\n«Без группы» и папки меньше мин. размера не участвуют.`)) return;
+  const schema = $("#prSchema").value.trim();
+  const items = list.map((c, k) => ({id: k,
+    text: [...c.idxs].sort((x, y) => F[y] - F[x]).slice(0, 10).map(i => Q[i]).join("; ")}));
+  const prog = $("#prProg");
+  const usage = {in: 0, out: 0};
+  let done = 0, failed = 0;
+  const batches = [];
+  for (let i = 0; i < items.length; i += 20) batches.push(items.slice(i, i + 20));
+  const runBatch = async b => {
+    try{
+      const r = await fetch("api/prompt_eval", {method: "POST", credentials: "same-origin",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({prompt, schema, items: b})});
+      const d = await r.json();
+      if (!r.ok) throw new Error(d.detail || r.status);
+      for (const it of d.items || []){
+        const c = list[+it.id];
+        if (!c) continue;
+        const {id, ...rest} = it;
+        PRES[Q[c.top]] = rest;
+      }
+      usage.in += d.usage?.prompt_tokens || 0;
+      usage.out += d.usage?.completion_tokens || 0;
+    }catch(e){ failed++; }
+    done++;
+    prog.textContent = `Оценка: ${Math.min(done * 20, items.length)} / ${items.length} папок…`;
+  };
+  // конкурентность 5 батчей
+  for (let i = 0; i < batches.length; i += 5)
+    await Promise.all(batches.slice(i, i + 5).map(runBatch));
+  dbSet("sem_pres:" + (PID || "demo"), PRES);
+  const usd = (usage.in * 0.28 + usage.out * 0.42) / 1e6;
+  prog.textContent = `Готово: оценено ${Object.keys(PRES).length} папок · ~$${usd.toFixed(3)}${failed ? ` · ошибок батчей: ${failed}` : ""}`;
+  render();
+}
+
+function renderPrLib(){
+  const sel = $("#prSel");
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">— новый промт —</option>' +
+    PRLIB.map((p, i) => `<option value="${i}">${esc(p.name)}</option>`).join("");
+  sel.value = cur && PRLIB[+cur] ? cur : sel.value;
 }
 
 async function copyMarkers(btn){
@@ -1440,6 +1548,30 @@ async function boot(){
     state.anFocus = state.anQ.length - 1;
     savePrefs(); render();
   };
+  $("#prRun").onclick = e => { e.preventDefault(); runPromptEval(); };
+  $("#presSort").addEventListener("change", e => { state.presSort = e.target.checked; savePrefs(); render(); });
+  $("#prSel").addEventListener("change", () => {
+    const p = PRLIB[+$("#prSel").value];
+    if (p){ $("#prText").value = p.prompt; $("#prSchema").value = p.schema || ""; }
+  });
+  $("#prSave").onclick = () => {
+    const prompt = $("#prText").value.trim();
+    if (!prompt){ alert("Промт пустой"); return; }
+    const cur = PRLIB[+$("#prSel").value];
+    const name = window.prompt("Название промта:", cur ? cur.name : "Мой промт");
+    if (!name) return;
+    const entry = {name: name.trim(), prompt, schema: $("#prSchema").value.trim()};
+    const ex = PRLIB.findIndex(p => p.name === entry.name);
+    if (ex >= 0) PRLIB[ex] = entry; else PRLIB.push(entry);
+    dbSet("sem_prompts", PRLIB); renderPrLib();
+  };
+  $("#prDel").onclick = () => {
+    const i = +$("#prSel").value;
+    if (!PRLIB[i]){ alert("Выбери сохранённый промт"); return; }
+    if (!confirm(`Удалить промт «${PRLIB[i].name}»?`)) return;
+    PRLIB.splice(i, 1); dbSet("sem_prompts", PRLIB); renderPrLib();
+  };
+
   $("#selTrash").onclick = () => {
     for (const t of SELQ) TRASH.add(t);
     SELQ.clear(); saveTrash(); updateSelBar(); render();
@@ -1522,6 +1654,14 @@ async function boot(){
   TRASH = new Set((await dbGet("sem_trash:" + (PID || "demo"))) || []);
   const rl = await dbGet("sem_rules:" + (PID || "demo"));
   if (rl && Array.isArray(rl.must) && Array.isArray(rl.not)) RULES = rl;
+  PRES = (await dbGet("sem_pres:" + (PID || "demo"))) || {};
+  PRLIB = (await dbGet("sem_prompts")) || [DEFAULT_PROMPT];
+  if (!PRLIB.length) PRLIB = [DEFAULT_PROMPT];
+  renderPrLib();
+  $("#prText").value = PRLIB[0].prompt;
+  $("#prSchema").value = PRLIB[0].schema || "";
+  $("#prSel").value = "0";
+  if (prefs.presSort){ state.presSort = true; $("#presSort").checked = true; }
   if (prefs.anOn){
     state.anOn = true;
     $("#anOn").checked = true;
