@@ -29,7 +29,11 @@
     border:1px solid var(--border); border-radius:8px; padding:4px 12px}
   .csvbtn:hover{border-color:var(--accent)}
   .grp.actions{display:flex; flex-direction:column; gap:7px}
-  .grp.actions .csvbtn{display:block; text-align:center; padding:7px 12px}
+  .grp.actions .csvbtn{display:block; text-align:center; padding:8px 12px;
+    background:var(--panel2); color:var(--text); font-weight:600}
+  .grp.actions .csvbtn:hover{border-color:var(--accent); color:#fff}
+  .grp.actions #savesl{background:var(--accent); border-color:var(--accent); color:#fff}
+  .grp.actions #savesl:hover{filter:brightness(1.12)}
   main{flex:1; display:flex; min-height:0}
   /* ---------- левая панель ---------- */
   aside{width:330px; min-width:330px; border-right:1px solid var(--border);
