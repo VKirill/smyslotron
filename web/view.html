@@ -25,9 +25,11 @@
   header .sub{color:var(--muted); font-size:12px}
   header .back{color:var(--muted); text-decoration:none; font-size:18px; line-height:1}
   header .back:hover{color:var(--text)}
-  header .csvbtn{margin-left:auto; color:var(--accent); text-decoration:none; font-size:13px;
+  .csvbtn{color:var(--accent); text-decoration:none; font-size:13px;
     border:1px solid var(--border); border-radius:8px; padding:4px 12px}
-  header .csvbtn:hover{border-color:var(--accent)}
+  .csvbtn:hover{border-color:var(--accent)}
+  .grp.actions{display:flex; flex-direction:column; gap:7px}
+  .grp.actions .csvbtn{display:block; text-align:center; padding:7px 12px}
   main{flex:1; display:flex; min-height:0}
   /* ---------- левая панель ---------- */
   aside{width:330px; min-width:330px; border-right:1px solid var(--border);
@@ -178,12 +180,14 @@
   <a href="./" class="back" title="К проектам">←</a>
   <h1 id="ptitle">Семантика · экспресс-кластеризация</h1>
   <span class="sub" id="psub">эмбеддинги + HAC, срез дендрограммы в браузере</span>
-  <a id="savesl" class="csvbtn" href="#" title="Зафиксировать текущий срез (вариант, режим, сила, мин. размер) как кластеризацию проекта: серверный CSV и интенты кластеров будут считаться по нему">💾 Сохранить срез</a>
-  <a id="slicebtn" class="csvbtn" href="#" title="Выгрузить кластеры ровно с текущими настройками (вариант, режим, сила, мин. размер)">⬇ Текущий срез в CSV</a>
-  <a id="csvlink" class="csvbtn" style="display:none" href="#" title="Серверный CSV: базовый вариант, средняя связь, автопорог (+интенты, если размечены)">Скачать CSV</a>
 </header>
 <main>
   <aside>
+    <div class="grp actions">
+      <a id="savesl" class="csvbtn" href="#" title="Зафиксировать текущий срез (вариант, режим, сила, мин. размер) как кластеризацию проекта: серверный CSV и интенты кластеров будут считаться по нему">💾 Сохранить срез</a>
+      <a id="slicebtn" class="csvbtn" href="#" title="Выгрузить кластеры ровно с текущими настройками (вариант, режим, сила, мин. размер)">⬇ Текущий срез в CSV</a>
+      <a id="csvlink" class="csvbtn" style="display:none" href="#" title="Серверный CSV: базовый вариант, средняя связь, автопорог — или зафиксированный срез, если сохранён (+интенты, если размечены)">Скачать CSV</a>
+    </div>
     <div class="grp">
       <label>Эмбеддинги</label>
       <div class="seg" id="segProvider"></div>
