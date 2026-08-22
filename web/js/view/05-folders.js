@@ -1,7 +1,9 @@
 "use strict";
+let _lastMark = null;  // последняя отмеченная папка для Shift-диапазона: {key, pos}
 function folderEl(c, col, overlap){
   const div = document.createElement("div");
   div.className = "folder";
+  div.dataset.anchor = Q[c.top];
   if (SELC.has(Q[c.top])) div.className += " linkmark";
   if (c.same === true) div.className += " same";
   else if (c.same === false) div.className += " diff";
@@ -42,11 +44,29 @@ function folderEl(c, col, overlap){
     pb.addEventListener("mouseleave", popHideSoon);
     pb.addEventListener("click", e => e.stopPropagation());
   }
+  head.addEventListener("mousedown", e => { if (e.shiftKey) e.preventDefault(); });
   head.addEventListener("click", e => {
+    const anchor = Q[c.top];
+    const colEl = div.closest(".col");
+    const folders = colEl ? [...colEl.querySelectorAll(".list > .folder")] : [];
+    const pos = folders.indexOf(div);
+    if (e.shiftKey){
+      // Shift+клик — отметить диапазон папок от последней отмеченной до этой
+      if (_lastMark && colEl && _lastMark.key === colEl.dataset.key && _lastMark.pos >= 0){
+        const [a, b] = [Math.min(_lastMark.pos, pos), Math.max(_lastMark.pos, pos)];
+        for (let k = a; k <= b; k++){
+          const an = folders[k] && folders[k].dataset.anchor;
+          if (an !== undefined) SELC.add(an);
+        }
+      } else SELC.add(anchor);
+      _lastMark = {key: colEl ? colEl.dataset.key : "", pos};
+      render();
+      return;
+    }
     if (e.ctrlKey || e.metaKey){
-      // Ctrl+клик — отметить/снять кластер для связки (правила «вместе»/«врозь»)
-      const anchor = Q[c.top];
+      // Ctrl+клик — отметить/снять один кластер
       SELC.has(anchor) ? SELC.delete(anchor) : SELC.add(anchor);
+      _lastMark = {key: colEl ? colEl.dataset.key : "", pos};
       render();
       return;
     }

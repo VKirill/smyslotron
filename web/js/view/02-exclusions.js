@@ -50,7 +50,7 @@ function showCtx(e, c){
   const linkCnt = SELC.size + (SELC.has(anchor) ? 0 : 1);
   const items = [
     [SELC.has(anchor) ? "✖" : "☑",
-     SELC.has(anchor) ? "Снять отметку связки" : "Отметить для связки (или Ctrl+клик по папке)",
+     SELC.has(anchor) ? "Снять отметку связки" : "Отметить для связки (Ctrl+клик; Shift+клик — диапазон)",
      () => { SELC.has(anchor) ? SELC.delete(anchor) : SELC.add(anchor); render(); }],
     ...(linkCnt >= 2 ? [
       ["🔗", `Слить отмеченные кластеры в один (${linkCnt})`, () => {
