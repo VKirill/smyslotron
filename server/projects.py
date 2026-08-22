@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 
 from .auth import current_user
-from .config import KNOWN_VARIANTS, MAX_PROJECTS, MAX_ROWS, P, PROJECTS
+from .config import KNOWN_VARIANTS, MAX_ROWS, P, PROJECTS
 from .db import db
 from .uploads import parse_upload_rows, save_template
 
@@ -56,11 +56,6 @@ async def create_project(request: Request, user: sqlite3.Row = Depends(current_u
     name = (body.get("name") or "Проект").strip()[:80]
     variants = [v for v in (body.get("variants") or ["openai", "gemini"])
                 if v in KNOWN_VARIANTS] or ["openai", "gemini"]
-    with db() as c:
-        n_active = c.execute("SELECT COUNT(*) FROM projects WHERE user_id=?",
-                             (user["id"],)).fetchone()[0]
-    if n_active >= MAX_PROJECTS:
-        raise HTTPException(400, f"Лимит {MAX_PROJECTS} проектов — удали старый")
     save_template(body)
     rows_out = parse_upload_rows(body)
     if len(rows_out) < 10:

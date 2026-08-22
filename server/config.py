@@ -8,9 +8,8 @@ PROJECTS = BASE / "projects"
 UPLOADS = BASE / "uploads"
 ENV_FILE = Path("/home/ubuntu/apps/seo-cluster/.env")  # fallback-источник API-ключей
 
-MAX_ROWS = 100_000
-MAX_PROJECTS = 5
-MAX_UPLOAD_MB = 50
+MAX_ROWS = 100_000      # физический предел: матрица сходства HAC упирается в RAM
+MAX_UPLOAD_MB = 200
 COOKIE = "sem_sess"
 P = "/semantika/api"
 
