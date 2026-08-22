@@ -1,0 +1,13 @@
+# секреты
+.env
+
+# рантайм-данные
+projects/
+uploads/
+semantika.db*
+web/data/
+
+# python
+.venv/
+__pycache__/
+*.pyc

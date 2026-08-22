@@ -1,0 +1,875 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Семантика — экспресс-кластеризация по эмбеддингам</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a22; --panel2:#1c2130; --border:#262c3d;
+    --text:#dde3ee; --muted:#8b93a7; --accent:#5b8cff; --accent2:#38c793;
+    --warn:#e5a93d; --hl:#2a3350;
+  }
+  *{box-sizing:border-box; margin:0}
+  body{background:var(--bg); color:var(--text);
+    font:15px/1.5 "Inter","Segoe UI",-apple-system,Roboto,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+    height:100vh; display:flex; flex-direction:column; overflow:hidden}
+  header{padding:10px 16px; border-bottom:1px solid var(--border);
+    display:flex; align-items:baseline; gap:14px; flex-wrap:wrap}
+  header h1{font-size:16px; font-weight:600}
+  header .sub{color:var(--muted); font-size:12px}
+  header .back{color:var(--muted); text-decoration:none; font-size:18px; line-height:1}
+  header .back:hover{color:var(--text)}
+  header .csvbtn{margin-left:auto; color:var(--accent); text-decoration:none; font-size:13px;
+    border:1px solid var(--border); border-radius:8px; padding:4px 12px}
+  header .csvbtn:hover{border-color:var(--accent)}
+  main{flex:1; display:flex; min-height:0}
+  /* ---------- левая панель ---------- */
+  aside{width:330px; min-width:330px; border-right:1px solid var(--border);
+    background:var(--panel); padding:14px; overflow-y:auto}
+  .grp{margin-bottom:18px}
+  .grp>label{display:block; font-size:12.5px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--muted); margin-bottom:7px}
+  .seg{display:flex; border:1px solid var(--border); border-radius:8px; overflow:hidden}
+  .seg.vlist{display:flex; flex-direction:column; border:0; border-radius:0; gap:2px; overflow:visible}
+  .vchk{display:flex; align-items:center; gap:8px; font-size:13.5px; padding:3px 2px; cursor:pointer}
+  .vchk input{accent-color:var(--accent)}
+  .seg button{flex:1; padding:7px 4px; background:transparent; border:0;
+    color:var(--muted); cursor:pointer; font-size:14px}
+  .seg button.on{background:var(--accent); color:#fff}
+  .hint{font-size:13px; color:var(--muted); margin-top:6px}
+  input[type=range]{width:100%; accent-color:var(--accent)}
+  .row{display:flex; justify-content:space-between; font-size:13.5px; color:var(--muted)}
+  .row b{color:var(--text)}
+  input[type=search],input[type=number]{width:100%; padding:7px 9px;
+    background:var(--panel2); border:1px solid var(--border); border-radius:8px;
+    color:var(--text); font-size:14.5px; outline:none}
+  input:focus{border-color:var(--accent)}
+  .stats{border-top:1px solid var(--border); padding-top:12px; font-size:13.5px;
+    display:grid; grid-template-columns:1fr auto; gap:4px 8px}
+  .stats span:nth-child(even){text-align:right; color:var(--text); font-variant-numeric:tabular-nums}
+  .stats span:nth-child(odd){color:var(--muted)}
+  .help{margin-top:16px; border-top:1px solid var(--border); padding-top:12px}
+  .help summary{cursor:pointer; color:var(--accent); font-size:13.5px; font-weight:600;
+    list-style-position:inside}
+  .help summary:hover{text-decoration:underline}
+  .help p,.help ul{margin-top:10px; font-size:13px; line-height:1.55; color:var(--muted)}
+  .help b{color:var(--text)}
+  .help ul{padding-left:18px}
+  .help li{margin-bottom:8px}
+  /* ---------- рабочая область ---------- */
+  #work{flex:1; display:flex; min-width:0}
+  #work.tworow{flex-direction:column}
+  .wrow{display:flex; flex:1 1 50%; min-height:0}
+  .wrow:first-child{border-bottom:2px solid var(--border)}
+  .wrow .col:last-child{border-right:0}
+  #work.tworow .colhead{padding:5px 10px; font-size:11.5px}
+  #work.tworow .fhead{padding:6px 9px}
+  .col{flex:1; min-width:0; display:flex; flex-direction:column; border-right:1px solid var(--border)}
+  .col:last-child{border-right:0}
+  .colhead{padding:8px 14px; border-bottom:1px solid var(--border);
+    background:var(--panel); font-size:12.5px; color:var(--muted);
+    display:flex; justify-content:space-between; align-items:center; gap:8px}
+  .colhead b{color:var(--text)}
+  .list{flex:1; overflow-y:auto; padding:8px 10px}
+  .folder{border:1px solid var(--border); border-radius:9px; margin-bottom:7px;
+    background:var(--panel); overflow:hidden}
+  .folder.same{background:#152219; border-color:#2c5a44}
+  .folder.same .qlist{background:#101b14}
+  .folder.diff{background:#291a1d; border-color:#5c303a}
+  .folder.diff .qlist{background:#1f1417}
+  .folder.sel{border-color:var(--accent)}
+  .folder.match{border-color:var(--accent2)}
+  .folder.nogroup{border-style:dashed}
+  .folder.nogroup .name{color:var(--muted)}
+  .fhead{display:flex; align-items:center; gap:8px; padding:8px 11px; cursor:pointer}
+  .fhead:hover{background:var(--panel2)}
+  .fhead .icon{color:var(--warn); flex:none}
+  .fhead .name{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .badge{flex:none; font-size:11px; color:var(--muted); background:var(--panel2);
+    border:1px solid var(--border); border-radius:20px; padding:1.5px 8px;
+    font-variant-numeric:tabular-nums}
+  .badge.ov{color:#fff; background:var(--accent2); border-color:var(--accent2)}
+  .copy{flex:none; background:none; border:1px solid var(--border); border-radius:6px;
+    color:var(--muted); cursor:pointer; font-size:13px; line-height:1; padding:2px 6px}
+  .copy:hover{color:var(--text); border-color:var(--accent)}
+  .copy.ok{color:var(--accent2); border-color:var(--accent2)}
+  .cmp{flex:none; background:none; border:1px solid var(--border); border-radius:6px;
+    color:var(--accent); cursor:pointer; font-size:13px; line-height:1; padding:2px 6px}
+  .cmp:hover{border-color:var(--accent); background:var(--hl)}
+  .tadd{background:var(--panel2); border:1px solid var(--border); border-radius:6px;
+    color:var(--accent); cursor:pointer; font-size:14px; line-height:1; padding:1px 8px;
+    vertical-align:middle; margin-left:6px}
+  .tadd:hover{border-color:var(--accent)}
+  .tpl{display:flex; align-items:center; gap:8px; padding:7px 10px; margin-bottom:6px;
+    border:1px solid var(--border); border-radius:8px; cursor:pointer; background:var(--panel2)}
+  .tpl:hover{border-color:var(--accent)}
+  .tpl.on{border-color:var(--accent); background:var(--hl)}
+  .tpl .tname{flex:none; max-width:45%; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; font-weight:600; font-size:13px}
+  .tpl .tinfo{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis;
+    white-space:nowrap; color:var(--muted); font-size:11.5px}
+  .tpl .tdel{flex:none; background:none; border:0; color:var(--muted); cursor:pointer;
+    font-size:15px; padding:0 2px}
+  .tpl .tdel:hover{color:#e05d5d}
+  .qlist{border-top:1px solid var(--border); padding:6px 11px 9px; background:#131722}
+  .q{display:flex; gap:8px; padding:2.5px 0; font-size:13px}
+  .q .qt{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+  .q .qf{color:var(--muted); font-size:12px; flex:none; font-variant-numeric:tabular-nums}
+  .q mark{background:var(--hl); color:var(--accent); border-radius:3px; padding:0 1px}
+  .dup{color:var(--accent2); font-size:11.5px; cursor:help}
+  .dup.hit{background:var(--hl); border-radius:4px; padding:0 4px}
+  .badge.geo{color:var(--warn); border-color:var(--warn)}
+  .badge.qb{color:var(--accent); border-color:var(--accent)}
+  .badge.int{font-weight:700}
+  .badge.int.ii,.pint.ii{color:#5b8cff; border-color:#5b8cff}
+  .badge.int.ik,.pint.ik{color:#e5a93d; border-color:#e5a93d}
+  .badge.int.it,.pint.it{color:#38c793; border-color:#38c793}
+  .badge.int.in,.pint.in{color:#8b93a7; border-color:#8b93a7}
+  .badge.int.mx{color:#e05d5d; border-color:#e05d5d}
+  .pint{display:inline-block; font-size:10px; font-weight:700; border:1px solid;
+    border-radius:4px; padding:0 3px; vertical-align:1px}
+  .more{padding:6px 11px; font-size:12px; color:var(--accent); cursor:pointer}
+  .more:hover{text-decoration:underline}
+  .note{padding:10px 14px; color:var(--muted); font-size:12.5px}
+  #loader{position:fixed; inset:0; background:rgba(15,17,21,.92); display:flex;
+    align-items:center; justify-content:center; flex-direction:column; gap:12px; z-index:9}
+  .spin{width:26px; height:26px; border:3px solid var(--border);
+    border-top-color:var(--accent); border-radius:50%; animation:r 0.8s linear infinite}
+  @keyframes r{to{transform:rotate(360deg)}}
+  button.link{background:none; border:0; color:var(--accent); cursor:pointer;
+    font-size:12px; padding:0}
+  @media (max-width:900px){
+    main{flex-direction:column; overflow-y:auto}
+    aside{width:100%; min-width:0; border-right:0; border-bottom:1px solid var(--border)}
+    body{overflow:auto; height:auto}
+  }
+</style>
+</head>
+<body>
+<header>
+  <a href="./" class="back" title="К проектам">←</a>
+  <h1 id="ptitle">Семантика · экспресс-кластеризация</h1>
+  <span class="sub" id="psub">эмбеддинги + HAC, срез дендрограммы в браузере</span>
+  <a id="slicebtn" class="csvbtn" href="#" title="Выгрузить кластеры ровно с текущими настройками (вариант, режим, сила, мин. размер)">⬇ Текущий срез в CSV</a>
+  <a id="csvlink" class="csvbtn" style="display:none" href="#" title="Серверный CSV: базовый вариант, средняя связь, автопорог (+интенты, если размечены)">Скачать CSV</a>
+</header>
+<main>
+  <aside>
+    <div class="grp">
+      <label>Эмбеддинги</label>
+      <div class="seg" id="segProvider"></div>
+      <div class="hint" id="providerHint"></div>
+    </div>
+    <div class="grp">
+      <label>Режим связи</label>
+      <div class="seg" id="segMode">
+        <button data-v="hard">Hard</button>
+        <button data-v="avg">Средний</button>
+        <button data-v="soft">Soft</button>
+      </div>
+      <div class="hint" id="modeHint"></div>
+    </div>
+    <div class="grp" id="sliderGrp" title="Колёсико мыши: шаг 0.02% (с Shift — 1%)">
+      <label>Сила объединения</label>
+      <input type="range" id="slider" min="0" max="10000" value="8200">
+      <div class="row"><span>порог сходства: <b id="thr">—</b></span><span>папок: <b id="ncl">—</b></span></div>
+    </div>
+    <div class="grp">
+      <label>Мин. фраз в папке</label>
+      <input type="number" id="minSize" min="1" value="2">
+      <div class="hint">папки меньше — в «Без группы» в конце списка</div>
+    </div>
+    <div class="grp">
+      <label>Поиск по фразам</label>
+      <input type="search" id="search" placeholder="например: аниме">
+    </div>
+    <div class="grp">
+      <label>Целевое гео</label>
+      <input type="search" id="targetGeo" list="geoList" placeholder="москва, мо, подмосковье">
+      <datalist id="geoList"></datalist>
+      <div class="hint">синонимы региона через запятую: их слова вычитаются из гео фразы —
+      «дома под ключ в москве и мо» склеится с «дома под ключ», а Казань останется отдельно</div>
+    </div>
+    <div class="stats" id="stats"></div>
+    <details class="help">
+      <summary>Как это работает</summary>
+      <p>Каждая фраза превращена в <b>эмбеддинг</b> — числовой «слепок смысла» от языковой
+      модели. Чем ближе смысл двух фраз, тем выше их сходство (от 0 до 1). По этим
+      сходствам заранее построено дерево слияний: сначала объединяются самые близкие
+      фразы, затем — всё менее похожие. Ползунок просто выбирает, где это дерево
+      «разрезать», поэтому пересчёт мгновенный.</p>
+
+      <p><b>Сила объединения</b> — сколько слияний применить. Слева — каждая фраза
+      отдельно; справа — всё ядро в одной папке. «Порог сходства» показывает,
+      насколько похожими должны быть фразы, чтобы попасть в одну папку при текущем
+      положении ползунка. Число «слияний применено» — позиция разреза дерева.</p>
+
+      <p><b>Режим связи</b> — правило, по которому папка принимает новую фразу:</p>
+      <ul>
+        <li><b>Hard</b> (complete linkage) — фраза попадает в папку, только если она
+        близка ко <i>всем</i> её участникам. Папки чистые, но мелкие; одиночек больше.
+        Хорош для точной разбивки под страницы.</li>
+        <li><b>Средний</b> (average linkage) — сравнивается <i>среднее</i> сходство со
+        всеми фразами папки. Баланс чистоты и размера; этот режим используется в
+        итоговом CSV.</li>
+        <li><b>Soft</b> (single linkage) — достаточно близости хотя бы к <i>одной</i>
+        фразе папки. Папки крупные, но могут «сцепляться» в длинные цепочки через
+        промежуточные фразы. Хорош, чтобы увидеть широкие темы.</li>
+      </ul>
+
+      <p><b>Дедуп</b> — смысловые дубли («фотосессия венчания» / «венчание фотосессия» /
+      «фотосессия венчание») склеены в одну фразу-репрезентанта с меткой «+N дубл.»
+      (наведи — увидишь формы). Их частотность просуммирована в Σ, счётчик папки
+      показывает «уникальных+дублей фраз». Поиск ищет и по склеенным формам.</p>
+
+      <p><b>Мин. фраз в папке</b> — папки меньше этого размера собираются в папку
+      <b>«Без группы»</b> в конце списка. Раскрой её — увидишь все запросы, которые
+      ни с чем не объединились при текущей силе; двигай ползунок вправо — они будут
+      постепенно прилипать к папкам.</p>
+
+      <p><b>A/B</b> — сравнение двух моделей эмбеддингов. Клик по папке раскрывает её
+      состав в любой колонке. Кнопка <b>⇄</b> у папки — в соседней колонке останутся
+      только папки, куда попали те же фразы, с бейджем «N общ.». Так видно, где OpenAI
+      и Gemini понимают смысл одинаково, а где тасуют запросы по-разному.
+      При 2+ колонках папки подкрашиваются: <b style="color:#38c793">зелёная</b> — состав
+      фраз совпал во всех включённых вариантах (консенсус, можно не проверять),
+      <b style="color:#e05d5d">красноватая</b> — хотя бы один вариант собрал её иначе —
+      смотри только на красные.</p>
+
+      <p><b>Шаблоны фильтров</b> — кнопка «+» сохраняет текущий набор настроек
+      (эмбеддинги, режим связи, сила объединения, мин. размер, поиск) под своим именем.
+      Клик по шаблону мгновенно применяет его — удобно переключаться и смотреть, в какую
+      папку уходит фраза при разных настройках. Шаблоны хранятся в этом браузере.</p>
+
+      <p><b>Выгрузка</b>: «⬇ Текущий срез в CSV» фиксирует кластеры ровно с текущими
+      настройками (первый отмеченный вариант эмбеддингов, режим связи, сила, мин. размер) —
+      что видишь, то и скачиваешь; мелкие папки уходят в «Без группы» в конце файла.
+      «Скачать CSV» — серверный файл с фиксированным срезом (средняя связь, автопорог),
+      к нему же привязана разметка интентов DeepSeek.</p>
+
+      <p>Имя папки — самая частотная фраза в ней. Σ — суммарная частотность папки
+      (очень точная, если была в файле). Бейдж <b>📍</b> — гео-кластер: фразы с разными
+      городами никогда не сливаются в одну папку, даже при максимальной силе.
+      <b>❓ N%</b> — доля вопросных фраз: высокий процент вперемешку с коммерцией —
+      сигнал вынести FAQ отдельно. Поле <b>«Целевое гео»</b> отключает гео-разрез для
+      своего региона: продвигаешься в Москве — «дома под ключ» и «дома под ключ в москве»
+      снова одна папка, а Казань остаётся отдельно. Настройка сохраняется в проект и
+      применяется к серверному CSV при следующем пересчёте.</p>
+    </details>
+    <div class="grp" style="margin-top:16px">
+      <label>Шаблоны фильтров <button id="tplAdd" class="tadd" title="Сохранить текущие настройки как шаблон">+</button></label>
+      <div id="tplList"></div>
+    </div>
+  </aside>
+  <div id="work"></div>
+</main>
+<div id="loader"><div class="spin"></div><div id="loadmsg">Загрузка данных…</div></div>
+
+<script>
+"use strict";
+const PID = new URLSearchParams(location.search).get("p");
+const DATA_BASE = PID ? `api/projects/${PID}/data/` : "data/";
+const $ = s => document.querySelector(s);
+const fmt = n => n.toLocaleString("ru-RU");
+const MODE_HINT = {
+  hard: "complete linkage: фраза в группе, только если близка ко всем её участникам — чистые мелкие папки",
+  avg:  "average linkage: баланс чистоты и размера (режим итогового CSV)",
+  soft: "single linkage: достаточно близости к одной фразе — крупные папки-цепочки",
+};
+const VARIANT_TITLES = {openai: "OpenAI · 3-large", gemini: "Gemini · CLUSTERING",
+  gem_sim: "Gemini · SEM_SIMILARITY", gem_query: "Gemini · RETRIEVAL_QUERY",
+  ensemble: "Ансамбль OpenAI+Gemini", openai1536: "OpenAI · 1536d",
+  gemini768: "Gemini · 768d", lemma: "OpenAI · леммы", intent: "OpenAI · интент-префикс",
+  voyage: "Voyage · 3-large", qwen: "Qwen3 · text-embedding-v4"};
+const VARIANT_SHORT = {openai: "OA", gemini: "GE", gem_sim: "GE-sim", gem_query: "GE-q",
+  ensemble: "АНС", openai1536: "OA-1536", gemini768: "GE-768", lemma: "OA-лем", intent: "OA-инт",
+  voyage: "VOY", qwen: "QW"};
+function titleOf(k){ const v = META && META.providers && META.providers[k];
+  return (v && v.title) || VARIANT_TITLES[k] || k; }
+function isAB(){ return state.cols.length > 1; }
+
+let META, Q, F, B, D, G, W, INT, TOTAL, N;
+const INT_SHORT = {"информационный": "И", "коммерческое исследование": "К",
+                   "транзакционный": "Т", "навигационный": "Н"};
+const INT_CLS = {"информационный": "ii", "коммерческое исследование": "ik",
+                 "транзакционный": "it", "навигационный": "in"};
+const TREES = {};                    // "openai_hard" -> {a,b,d}
+const state = {cols: ["openai"], mode: "hard",
+               slider: 8200, minSize: 2, search: "",
+               targetGeo: "",        // целевой регион: его гео = «без гео»
+               sliders: {},          // сила объединения на каждый вид: openai/gemini/ab
+               sel: null,            // папка для сравнения в A/B: {col, label, idxs}
+               expanded: new Set(),  // раскрытые папки "prov:label"
+               shown: {}};           // сколько папок показано в колонке
+
+async function loadTree(key){
+  if (TREES[key]) return TREES[key];
+  $("#loadmsg").textContent = "Загрузка дерева " + key + "…";
+  $("#loader").style.display = "flex";
+  const buf = await (await fetch(DATA_BASE + key + ".bin", {cache: "no-cache", credentials: "same-origin"})).arrayBuffer();
+  const m = buf.byteLength / 12, dv = new DataView(buf);
+  const a = new Int32Array(m), b = new Int32Array(m), d = new Float32Array(m);
+  for (let i = 0; i < m; i++){
+    a[i] = dv.getInt32(i * 12, true);
+    b[i] = dv.getInt32(i * 12 + 4, true);
+    d[i] = dv.getFloat32(i * 12 + 8, true);
+  }
+  $("#loader").style.display = "none";
+  return TREES[key] = {a, b, d};
+}
+
+// срез дендрограммы: первые k слияний, union-find по листьям
+function cutLabels(tree, k){
+  const uf = new Int32Array(N);
+  for (let i = 0; i < N; i++) uf[i] = i;
+  const find = x => { let r = x; while (uf[r] !== r) r = uf[r];
+                      while (uf[x] !== r){ const nx = uf[x]; uf[x] = r; x = nx; } return r; };
+  const rep = new Int32Array(N + k);
+  for (let i = 0; i < N; i++) rep[i] = i;
+  for (let i = 0; i < k; i++){
+    const ra = find(rep[tree.a[i]]), rb = find(rep[tree.b[i]]);
+    uf[rb] = ra;
+    rep[N + i] = ra;
+  }
+  const lab = new Int32Array(N);
+  for (let i = 0; i < N; i++) lab[i] = find(i);
+  return lab;
+}
+
+function clusterize(lab){
+  const map = new Map();
+  for (let i = 0; i < N; i++){
+    let arr = map.get(lab[i]);
+    if (!arr) map.set(lab[i], arr = []);
+    arr.push(i);
+  }
+  // фразы с разными городами не сливаем: кластер с >1 гео-ключом режется по гео;
+  // целевое гео приравнивается к «без гео» и не отрезается
+  const tset = new Set(state.targetGeo.toLowerCase().split(",").map(x => x.trim()).filter(Boolean));
+  const geoOf = i => {
+    const g = G ? G[i] : "";
+    if (!g || !tset.size) return g;
+    return g.split(" ").filter(w => !tset.has(w)).sort().join(" ");
+  };
+  const parts = [];
+  for (const [label, idxs] of map){
+    if (G && new Set(idxs.map(geoOf)).size > 1){
+      const by = new Map();
+      for (const i of idxs){
+        const g = geoOf(i);
+        let a = by.get(g);
+        if (!a) by.set(g, a = []);
+        a.push(i);
+      }
+      for (const [g, a] of by) parts.push([label + "|" + g, a]);
+    } else parts.push([label, idxs]);
+  }
+  const cl = [];
+  for (const [label, idxs] of parts){
+    let sum = 0, top = idxs[0], qn = 0, dups = 0;
+    const iw = {};
+    for (const i of idxs){
+      sum += F[i]; if (F[i] > F[top]) top = i;
+      if (W && W[i]) qn++;
+      if (D && D[i]) dups += D[i].length;
+      if (INT && INT[i]) iw[INT[i]] = (iw[INT[i]] || 0) + Math.max(1, F[i]);
+    }
+    let dom = "", mixed = false;
+    const tops = Object.entries(iw).sort((a, b) => b[1] - a[1]);
+    if (tops.length){
+      const tot = tops.reduce((a, x) => a + x[1], 0);
+      dom = tops[0][0];
+      mixed = tops.length > 1 && tops[1][1] >= 0.25 * tot;
+    }
+    const geos = G ? [...new Set(idxs.map(i => G[i]).filter(Boolean))] : [];
+    cl.push({label, idxs, sum, top, qn, dups, dom, mixed, geo: geos.join("+")});
+  }
+  cl.sort((x, y) => y.sum - x.sum);
+  return cl;
+}
+
+function kFromSlider(){ return Math.round(state.slider / 10000 * (N - 1)); }
+
+async function getCols(){
+  const provs = state.cols;
+  const cols = [];
+  for (const p of provs){
+    const tree = await loadTree(p + "_" + state.mode);
+    const k = kFromSlider();
+    const lab = cutLabels(tree, k);
+    cols.push({prov: p, tree, k, clusters: clusterize(lab), lab});
+  }
+  return cols;
+}
+
+function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
+function matchQ(i, q){
+  if (Q[i].toLowerCase().includes(q)) return true;
+  return !!(D && D[i] && D[i].some(f => f.toLowerCase().includes(q)));
+}
+function hi(s, q){
+  if (!q) return esc(s);
+  const i = s.toLowerCase().indexOf(q);
+  if (i < 0) return esc(s);
+  return esc(s.slice(0,i)) + "<mark>" + esc(s.slice(i, i+q.length)) + "</mark>" + esc(s.slice(i+q.length));
+}
+
+function folderEl(c, col, overlap){
+  const div = document.createElement("div");
+  div.className = "folder";
+  if (c.same === true) div.className += " same";
+  else if (c.same === false) div.className += " diff";
+  if (state.sel && state.sel.col === col.prov && state.sel.label === c.label) div.className += " sel";
+  if (overlap) div.className += " match";
+  const name = c.name || Q[c.top];
+  const consTitle = c.same === true ? "Состав совпал во всех включённых вариантах"
+    : c.same === false ? "Состав отличается в: " + (c.diffWith || []).join(", ") : "";
+  div.innerHTML = `<div class="fhead"><span class="icon" title="${esc(consTitle)}">${c.icon || "📁"}</span>
+      <span class="name" title="${esc(name)}">${hi(name, state.search)}</span>
+      ${c.dom ? `<span class="badge int ${INT_CLS[c.dom] || ""}${c.mixed ? " mx" : ""}" title="Интент кластера: ${esc(c.dom)}${c.mixed ? " (смешанный — есть второй интент ≥25%)" : ""}">${INT_SHORT[c.dom] || "?"}${c.mixed ? "⚠" : ""}</span>` : ""}
+      ${c.geo ? `<span class="badge geo" title="Гео-кластер">📍 ${esc(c.geo)}</span>` : ""}
+      ${c.qn ? `<span class="badge qb" title="Вопросных фраз">❓ ${Math.round(c.qn / c.idxs.length * 100)}%</span>` : ""}
+      ${isAB() ? `<button class="cmp" title="Найти эти фразы в соседней колонке">⇄</button>` : ""}
+      <button class="copy" title="Скопировать уникальные фразы кластера (без дублей)">⧉</button>
+      ${overlap ? `<span class="badge ov">${overlap} общ.</span>` : ""}
+      <span class="badge" title="Уникальных смыслов${c.dups ? ` + склеенных дублей` : ""}">${fmt(c.idxs.length)}${c.dups ? `+${fmt(c.dups)}` : ""} фраз</span>
+      <span class="badge">Σ ${fmt(c.sum)}</span></div>`;
+  const head = div.firstElementChild;
+  head.querySelector(".copy").addEventListener("click", e => {
+    e.stopPropagation();
+    copyCluster(c, e.currentTarget);
+  });
+  const cmp = head.querySelector(".cmp");
+  if (cmp) cmp.addEventListener("click", e => {
+    e.stopPropagation();
+    state.sel = {col: col.prov, label: c.label, idxs: c.idxs};
+    render();
+  });
+  head.addEventListener("click", () => toggleFolder(div, c, col));
+  return div;
+}
+
+function toggleFolder(div, c, col){
+  const key = col.prov + ":" + c.label;
+  const open = div.querySelector(".qlist");
+  if (open){ open.remove(); state.expanded.delete(key); return; }
+  expandInto(div, c);
+  state.expanded.add(key);
+}
+
+async function copyCluster(c, btn){
+  // копируем только уникальные смыслы (репрезентанты), без склеенных дублей
+  const lines = [...c.idxs].sort((x, y) => F[y] - F[x]).map(i => Q[i]);
+  try{
+    await navigator.clipboard.writeText(lines.join("\n"));
+    const old = btn.textContent;
+    btn.textContent = "✓"; btn.classList.add("ok");
+    setTimeout(() => { btn.textContent = old; btn.classList.remove("ok"); }, 1200);
+  }catch(err){
+    btn.textContent = "✗";
+    setTimeout(() => { btn.textContent = "⧉"; }, 1200);
+  }
+}
+
+function expandInto(div, c, onlyMatches){
+  const ql = document.createElement("div");
+  ql.className = "qlist";
+  const sq = state.search.trim().toLowerCase();
+  let pool = c.idxs;
+  if (onlyMatches && sq) pool = pool.filter(i => matchQ(i, sq));
+  const sorted = [...pool].sort((x, y) => {
+    if (sq){
+      const mx = matchQ(x, sq) ? 1 : 0, my = matchQ(y, sq) ? 1 : 0;
+      if (mx !== my) return my - mx;  // совпадения поиска — наверх
+    }
+    return F[y] - F[x];
+  });
+  const CAP = 300;
+  ql.innerHTML = sorted.slice(0, CAP).map(i => {
+    const q = state.search.trim().toLowerCase();
+    const hitDup = q && D && D[i] && D[i].some(f => f.toLowerCase().includes(q)) && !Q[i].toLowerCase().includes(q);
+    const dd = D && D[i] && D[i].length
+      ? ` <span class="dup${hitDup ? " hit" : ""}" title="${esc(D[i].join(", "))}">+${D[i].length} дубл.${hitDup ? " ✓" : ""}</span>` : "";
+    const ib = INT && INT[i]
+      ? `<span class="pint ${INT_CLS[INT[i]] || ""}" title="${esc(INT[i])}">${INT_SHORT[INT[i]] || "?"}</span> ` : "";
+    const mk = (W && W[i] ? " ❓" : "") + (G && G[i] ? " 📍" : "");
+    return `<div class="q"><span class="qt">${ib}${hi(Q[i], state.search)}${mk}${dd}</span><span class="qf">${fmt(F[i])}</span></div>`;
+  }).join("") + (sorted.length > CAP ? `<div class="q"><span class="qt" style="color:var(--muted)">… ещё ${fmt(sorted.length - CAP)}</span></div>` : "");
+  div.appendChild(ql);
+}
+
+let renderQueued = false;
+function render(){
+  if (renderQueued) return;
+  renderQueued = true;
+  requestAnimationFrame(async () => {
+    renderQueued = false;
+    const cols = await getCols();
+    const work = $("#work");
+    work.innerHTML = "";
+    work.classList.toggle("tworow", cols.length > 4);
+    let rowTop = work, rowBottom = work;
+    if (cols.length > 4){
+      rowTop = document.createElement("div"); rowTop.className = "wrow";
+      rowBottom = document.createElement("div"); rowBottom.className = "wrow";
+      work.append(rowTop, rowBottom);
+    }
+    const topCount = cols.length > 4 ? Math.floor(cols.length / 2) : cols.length;
+    const q = state.search.trim().toLowerCase();
+
+    // консенсус: папка зелёная, если её состав совпал во ВСЕХ колонках
+    if (cols.length > 1){
+      const sets = cols.map(c => new Set(c.clusters.map(cl => cl.idxs.join(","))));
+      for (const c of cols)
+        for (const cl of c.clusters){
+          const key = cl.idxs.join(",");
+          cl.same = sets.every(st => st.has(key));
+          cl.diffWith = cl.same ? []
+            : cols.filter((_, ci) => !sets[ci].has(key)).map(x => titleOf(x.prov));
+        }
+    } else {
+      for (const cl of cols[0].clusters) cl.same = null;
+    }
+
+    // A/B: карта пересечений для второй колонки
+    let ovMaps = null;
+    if (isAB() && state.sel){
+      if (cols.some(c => c.prov === state.sel.col)){
+        ovMaps = {};
+        for (const other of cols){
+          if (other.prov === state.sel.col) continue;
+          const m2 = new Map();
+          for (const i of state.sel.idxs){
+            const l = other.lab[i];
+            m2.set(l, (m2.get(l) || 0) + 1);
+          }
+          ovMaps[other.prov] = m2;
+        }
+      } else state.sel = null;
+    }
+
+    for (const col of cols){
+      const el = document.createElement("div");
+      el.className = "col";
+      const ovMap = ovMaps ? ovMaps[col.prov] : null;
+      const isOther = !!ovMap;
+      let clusters = col.clusters;
+      let small = clusters.filter(c => c.idxs.length < state.minSize);
+      clusters = clusters.filter(c => c.idxs.length >= state.minSize);
+      if (q) clusters = clusters.filter(c => c.idxs.some(i => matchQ(i, q)));
+      if (isOther && ovMap){
+        clusters = clusters.filter(c => ovMap.has(c.label));
+        clusters.sort((x, y) => (ovMap.get(y.label)) - (ovMap.get(x.label)));
+      }
+      const smallCnt = small.reduce((s, c) => s + c.idxs.length, 0);
+
+      const head = document.createElement("div");
+      head.className = "colhead";
+      head.innerHTML = `<span><b>${titleOf(col.prov)}</b></span>
+        <span>${fmt(clusters.length)} папок${isOther && ovMap ? " с общими фразами" : ""}
+        ${isAB() && state.sel && col.prov === state.sel.col ? ` · <button class="link" id="resetSel">сбросить выбор</button>` : ""}</span>`;
+      el.appendChild(head);
+
+      const list = document.createElement("div");
+      list.className = "list";
+      const key = col.prov;
+      const shown = state.shown[key] || 200;
+      for (const c of clusters.slice(0, shown)){
+        const fel = folderEl(c, col, isOther && ovMap ? ovMap.get(c.label) : 0);
+        if (state.expanded.has(col.prov + ":" + c.label)) expandInto(fel, c);
+        list.appendChild(fel);
+      }
+      if (clusters.length > shown){
+        const m = document.createElement("div");
+        m.className = "more";
+        m.textContent = `Показать ещё (${fmt(clusters.length - shown)} папок скрыто)`;
+        m.onclick = () => { state.shown[key] = shown + 300; render(); };
+        list.appendChild(m);
+      }
+      if (smallCnt){
+        const idxs = small.flatMap(cc => cc.idxs);
+        let show = true, ov = 0;
+        if (q) show = idxs.some(i => matchQ(i, q));
+        if (isOther && ovMap){
+          const sl = new Set(small.map(cc => cc.label));
+          for (const [l, cnt] of ovMap) if (sl.has(l)) ov += cnt;
+          show = ov > 0;
+        }
+        if (show){
+          let ssum = 0, stop = idxs[0];
+          for (const i of idxs){ ssum += F[i]; if (F[i] > F[stop]) stop = i; }
+          const ng = {label: "__nogroup__", idxs, sum: ssum, top: stop, same: null,
+                      name: "Без группы — не объединились при текущей силе", icon: "🗂"};
+          const fel = folderEl(ng, col, ov);
+          fel.classList.add("nogroup");
+          const hitSearch = q && idxs.some(i => matchQ(i, q));
+          // при поиске папка остаётся внизу, но раскрыта и показывает ТОЛЬКО найденное
+          if (hitSearch || state.expanded.has(col.prov + ":__nogroup__"))
+            expandInto(fel, ng, hitSearch);
+          list.appendChild(fel);
+        }
+      }
+      el.appendChild(list);
+      (cols.indexOf(col) < topCount ? rowTop : rowBottom).appendChild(el);
+    }
+    const rs = $("#resetSel");
+    if (rs) rs.onclick = () => { state.sel = null; render(); };
+
+    // статистика по первой колонке
+    const c0 = cols[0];
+    const singles = c0.clusters.filter(c => c.idxs.length === 1).length;
+    const thr = c0.k > 0 ? 1 - c0.tree.d[c0.k - 1] : 1;
+    $("#thr").textContent = thr.toFixed(3);
+    $("#ncl").textContent = fmt(c0.clusters.length);
+    $("#stats").innerHTML = `
+      <span>Фраз в ядре</span><span>${fmt(TOTAL)}</span>
+      <span>Уникальных смыслов</span><span>${fmt(N)}</span>
+      <span>Папок всего</span><span>${fmt(c0.clusters.length)}</span>
+      <span>Одиночек</span><span>${fmt(singles)}</span>
+      <span>Слияний применено</span><span>${fmt(c0.k)} / ${fmt(N - 1)}</span>`;
+    renderTpls();
+  });
+}
+
+function viewKey(){ return state.cols.join("+"); }
+function loadPrefs(){ try{ const pr = JSON.parse(localStorage.getItem("sem_prefs:" + (PID || "demo")) || "{}");
+  if (pr.sliders) for (const k in pr.sliders) if (pr.sliders[k] <= 1000) pr.sliders[k] *= 10;
+  return pr; }catch(e){ return {}; } }
+function savePrefs(){ try{ localStorage.setItem("sem_prefs:" + (PID || "demo"), JSON.stringify(
+  {view: state.cols, search: state.search, sliders: state.sliders,
+   targetGeo: state.targetGeo})); }catch(e){} }
+
+// ---------- шаблоны фильтров (localStorage) ----------
+function loadTpls(){ try{ const t = JSON.parse(localStorage.getItem("sem_tpl") || "[]");
+  t.forEach(x => {
+    if (x.slider <= 1000) x.slider *= 10;
+    if (!x.cols) x.cols = x.ab ? ["openai", "gemini"] : [x.provider || "openai"];
+  }); return t; }catch(e){ return []; } }
+function saveTpls(t){ try{ localStorage.setItem("sem_tpl", JSON.stringify(t)); }catch(e){} }
+const MODE_NAME = {hard: "Hard", avg: "Средний", soft: "Soft"};
+
+function tplLabel(t){
+  return `${t.cols.map(k => VARIANT_SHORT[k] || k).join("+")} · ${MODE_NAME[t.mode]} · ${(t.slider / 100).toFixed(1)}%` +
+         (t.minSize > 1 ? ` · мин.${t.minSize}` : "") + (t.search ? ` · «${t.search}»` : "");
+}
+
+function renderTpls(){
+  const list = $("#tplList");
+  if (!list) return;
+  const tpls = loadTpls();
+  list.innerHTML = tpls.length ? "" : '<div class="hint">нажми «+», чтобы сохранить текущие настройки как шаблон</div>';
+  tpls.forEach((t, i) => {
+    const active = t.mode === state.mode && t.slider === state.slider &&
+      t.minSize === state.minSize && (t.search || "") === state.search &&
+      JSON.stringify(t.cols) === JSON.stringify(state.cols);
+    const row = document.createElement("div");
+    row.className = "tpl" + (active ? " on" : "");
+    row.innerHTML = `<span class="tname" title="${esc(tplLabel(t))}">${esc(t.name)}</span>
+      <span class="tinfo">${esc(tplLabel(t))}</span>
+      <button class="tdel" title="Удалить шаблон">×</button>`;
+    row.querySelector(".tdel").onclick = e => {
+      e.stopPropagation();
+      const ts = loadTpls(); ts.splice(i, 1); saveTpls(ts); renderTpls();
+    };
+    row.onclick = () => applyTpl(t);
+    list.appendChild(row);
+  });
+}
+
+function applyTpl(t){
+  const ok = (t.cols || ["openai"]).filter(p => META.provs.includes(p));
+  state.cols = ok.length ? ok : [META.provs[0]];
+  state.mode = t.mode; state.slider = t.slider; state.minSize = t.minSize;
+  state.search = t.search || "";
+  state.sel = null; state.shown = {}; state.expanded.clear();
+  state.sliders[viewKey()] = state.slider;
+  savePrefs();
+  syncUI(); render();
+}
+
+function syncUI(){
+  $("#slider").value = state.slider;
+  $("#minSize").value = state.minSize;
+  $("#search").value = state.search;
+  document.querySelectorAll("#segProvider input").forEach(b => b.checked = state.cols.includes(b.value));
+  document.querySelectorAll("#segMode button").forEach(b => b.classList.toggle("on", b.dataset.v === state.mode));
+  $("#modeHint").textContent = MODE_HINT[state.mode];
+  $("#providerHint").textContent = isAB()
+    ? "⇄ у папки — подсветить её фразы в остальных колонках; клик — раскрыть состав"
+    : "отметь до 3 вариантов — колонки встанут рядом для сравнения";
+}
+
+async function exportSlice(){
+  const vkey = state.cols[0];
+  const tree = await loadTree(vkey + "_" + state.mode);
+  const clusters = clusterize(cutLabels(tree, kFromSlider()));
+  const lines = [["Запрос", "Частотность (Σ группы дублей)", "Базовая (Σ)", "Дубли",
+                  "Топоним", "Вопрос", "Интент", "Кластер", "Имя кластера",
+                  "Интент кластера", "Риск смешения"]];
+  let ncl = 0;
+  const noGroup = [];
+  for (const c of clusters){
+    if (c.idxs.length < state.minSize){ noGroup.push(...c.idxs); continue; }
+    ncl++;
+    const name = Q[c.top];
+    for (const i of [...c.idxs].sort((x, y) => F[y] - F[x]))
+      lines.push([Q[i], F[i], B[i], (D && D[i] ? D[i].join(" | ") : ""),
+                  (G && G[i]) || "", (W && W[i]) ? "да" : "",
+                  (INT && INT[i]) || "", ncl, name,
+                  c.dom || "", c.mixed ? "да" : ""]);
+  }
+  for (const i of noGroup.sort((x, y) => F[y] - F[x]))
+    lines.push([Q[i], F[i], B[i], (D && D[i] ? D[i].join(" | ") : ""),
+                (G && G[i]) || "", (W && W[i]) ? "да" : "",
+                (INT && INT[i]) || "", "", "Без группы", "", ""]);
+  const csv = "\ufeff" + lines.map(r =>
+    r.map(v => String(v).includes(";") || String(v).includes('"')
+      ? '"' + String(v).replace(/"/g, '""') + '"' : v).join(";")).join("\r\n");
+  const modeName = {hard: "hard", avg: "avg", soft: "soft"}[state.mode];
+  const fname = `srez_${vkey}_${modeName}_${(state.slider / 100).toFixed(1)}pct.csv`;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], {type: "text/csv;charset=utf-8"}));
+  a.download = fname;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function segInit(el, values, cur, cb){
+  el.querySelectorAll("button").forEach(b => {
+    b.classList.toggle("on", b.dataset.v === cur);
+    b.onclick = () => { cb(b.dataset.v);
+      el.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); };
+  });
+}
+
+async function boot(){
+  if (PID){
+    try{
+      const pr = await (await fetch(`api/projects/${PID}`, {credentials:"same-origin"})).json();
+      $("#ptitle").textContent = pr.name || "Проект";
+      $("#psub").textContent = `${(pr.rows||0).toLocaleString("ru-RU")} фраз · ` +
+        (pr.uniq ? `${pr.uniq.toLocaleString("ru-RU")} уникальных смыслов · ` : "") +
+        `создан ${pr.created || ""}`;
+      const cl = $("#csvlink");
+      cl.style.display = ""; cl.href = DATA_BASE + "result.csv";
+    }catch(e){}
+  }
+  META = await (await fetch(DATA_BASE + "meta.json", {cache: "no-cache", credentials: "same-origin"})).json();
+  META.provs = Object.keys(META.providers);
+  $("#loadmsg").textContent = "Загрузка ядра запросов…";
+  const qd = await (await fetch(DATA_BASE + "queries.json", {cache: "no-cache", credentials: "same-origin"})).json();
+  INT = null;
+  try{
+    const ir = await fetch(DATA_BASE + "intents.json", {cache: "no-cache", credentials: "same-origin"});
+    if (ir.ok) INT = (await ir.json()).i;
+  }catch(e){}
+  Q = qd.q; F = qd.f; B = qd.b; D = qd.d || null; G = qd.g || null; W = qd.w || null; N = Q.length; TOTAL = qd.total || N;
+
+  // варианты эмбеддингов: галочки, до 3 колонок одновременно
+  state.cols = [META.provs.includes("openai") ? "openai" : META.provs[0]];
+  const seg = $("#segProvider");
+  seg.classList.add("vlist");
+  seg.innerHTML = META.provs.map(p =>
+    `<label class="vchk"><input type="checkbox" value="${p}"> ${titleOf(p)}</label>`).join("")
+    + (META.provs.length > 2 ? `<div style="margin-top:4px"><button class="link" id="vAll">все разом</button>
+       · <button class="link" id="vOne">только первый</button></div>` : "");
+  function applyCols(cols){
+    state.cols = cols;
+    state.sel = null; state.shown = {}; state.expanded.clear();
+    state.slider = state.sliders[viewKey()] ?? state.slider;
+    $("#slider").value = state.slider;
+    savePrefs(); syncUI(); render();
+  }
+  seg.addEventListener("change", e => {
+    const checked = [...seg.querySelectorAll("input:checked")].map(x => x.value);
+    if (!checked.length){ e.target.checked = true; return; }
+    applyCols(META.provs.filter(p => checked.includes(p)));
+  });
+  const vAll = $("#vAll"), vOne = $("#vOne");
+  if (vAll) vAll.onclick = () => applyCols([...META.provs]);
+  if (vOne) vOne.onclick = () => applyCols([META.provs[0]]);
+
+  segInit($("#segMode"), null, state.mode, v => {
+    state.mode = v; state.sel = null; state.shown = {};
+    $("#modeHint").textContent = MODE_HINT[v];
+    render();
+  });
+  $("#modeHint").textContent = MODE_HINT[state.mode];
+
+  $("#sliderGrp").addEventListener("wheel", e => {
+    e.preventDefault();
+    const step = e.shiftKey ? 100 : 2;
+    const sl = $("#slider");
+    sl.value = Math.max(0, Math.min(10000, +sl.value + (e.deltaY < 0 ? step : -step)));
+    sl.dispatchEvent(new Event("input"));
+  }, {passive: false});
+  $("#slider").addEventListener("input", e => {
+    state.slider = +e.target.value;
+    state.sliders[viewKey()] = state.slider;
+    state.sel = null; savePrefs(); render();
+  });
+  $("#minSize").addEventListener("input", e => { state.minSize = Math.max(1, +e.target.value || 1); state.sel = null; render(); });
+  $("#search").addEventListener("input", e => { state.search = e.target.value; state.shown = {}; savePrefs(); render(); });
+  let tgTimer = null;
+  $("#targetGeo").addEventListener("input", e => {
+    state.targetGeo = e.target.value;
+    state.sel = null; savePrefs(); render();
+    if (PID){
+      clearTimeout(tgTimer);
+      tgTimer = setTimeout(() => fetch(`api/projects/${PID}/target_geo`, {
+        method: "POST", credentials: "same-origin",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({target_geo: state.targetGeo.trim().toLowerCase()})
+      }).catch(() => {}), 800);
+    }
+  });
+
+  const prefs = loadPrefs();
+  state.sliders = prefs.sliders || {};
+  if (typeof prefs.search === "string") state.search = prefs.search;
+  if (typeof prefs.targetGeo === "string") state.targetGeo = prefs.targetGeo;
+  $("#targetGeo").value = state.targetGeo;
+  // даталист: топ-30 гео по числу фраз
+  if (G){
+    const cnt = {};
+    for (const g of G) if (g) cnt[g] = (cnt[g] || 0) + 1;
+    $("#geoList").innerHTML = Object.entries(cnt).sort((a, b) => b[1] - a[1])
+      .slice(0, 30).map(([g, n]) => `<option value="${esc(g)}">${n} фраз</option>`).join("");
+  }
+  let pv = prefs.view;
+  if (pv === "ab") pv = ["openai", "gemini"];
+  else if (typeof pv === "string") pv = [pv];
+  if (Array.isArray(pv)){
+    const ok = pv.filter(x => META.provs.includes(x));
+    if (ok.length) state.cols = ok;
+  }
+  state.slider = state.sliders[viewKey()] ?? state.slider;
+  syncUI();
+
+  $("#slicebtn").onclick = e => { e.preventDefault(); exportSlice(); };
+
+  $("#tplAdd").onclick = () => {
+    const def = `${state.cols.map(k => VARIANT_SHORT[k] || k).join("+")} ${(state.slider / 100).toFixed(1)}%`;
+    const name = prompt("Название шаблона:", def);
+    if (!name) return;
+    const ts = loadTpls();
+    ts.push({name: name.trim(), cols: [...state.cols], mode: state.mode,
+             slider: state.slider, minSize: state.minSize, search: state.search});
+    saveTpls(ts); renderTpls();
+  };
+  renderTpls();
+
+  await loadTree(state.cols[0] + "_" + state.mode);
+  $("#loader").style.display = "none";
+  render();
+}
+boot().catch(e => { $("#loadmsg").textContent = "Ошибка загрузки: " + e; });
+</script>
+</body>
+</html>

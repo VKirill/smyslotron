@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Объединить CSV — Семантика</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap">
+<style>
+  :root{
+    --bg:#0f1115; --panel:#161a22; --panel2:#1c2130; --border:#262c3d;
+    --text:#dde3ee; --muted:#8b93a7; --accent:#5b8cff; --accent2:#38c793;
+    --warn:#e5a93d; --err:#e05d5d;
+  }
+  *{box-sizing:border-box; margin:0}
+  body{background:var(--bg); color:var(--text); min-height:100vh;
+    font:15px/1.5 "Inter","Segoe UI",-apple-system,Roboto,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased}
+  header{padding:12px 20px; border-bottom:1px solid var(--border); display:flex;
+    align-items:baseline; gap:18px}
+  header h1{font-size:17px; font-weight:600}
+  header nav{display:flex; gap:14px}
+  header nav a{color:var(--muted); text-decoration:none; font-size:14px;
+    padding-bottom:2px; border-bottom:2px solid transparent}
+  header nav a:hover{color:var(--text)}
+  header nav a.on{color:var(--text); border-color:var(--accent)}
+  main{max-width:760px; margin:0 auto; padding:28px 20px}
+  .drop{border:2px dashed var(--border); border-radius:14px; padding:30px;
+    text-align:center; color:var(--muted); cursor:pointer; margin-bottom:20px}
+  .drop:hover,.drop.over{border-color:var(--accent); color:var(--text)}
+  .file{background:var(--panel); border:1px solid var(--border); border-radius:11px;
+    padding:11px 16px; margin-bottom:9px; display:flex; align-items:center; gap:12px}
+  .file .nm{font-weight:600; font-size:14px}
+  .file .info{color:var(--muted); font-size:12.5px; flex:1}
+  .file.bad{border-color:var(--err)}
+  .file .info b{color:var(--text)}
+  .file button{background:none; border:0; color:var(--muted); cursor:pointer; font-size:15px}
+  .file button:hover{color:var(--err)}
+  .stats{background:var(--panel); border:1px solid var(--border); border-radius:11px;
+    padding:14px 18px; margin:18px 0; display:flex; gap:26px; flex-wrap:wrap; font-size:14px}
+  .stats span{color:var(--muted)}
+  .stats b{color:var(--text); font-variant-numeric:tabular-nums}
+  .btn{background:var(--accent); color:#fff; border:0; border-radius:9px;
+    padding:11px 22px; cursor:pointer; font-size:15px; font-family:inherit}
+  .btn:hover{filter:brightness(1.1)}
+  .btn:disabled{opacity:.4; cursor:default}
+  .hint{color:var(--muted); font-size:13px; margin-top:14px; line-height:1.55}
+</style>
+</head>
+<body>
+<header>
+  <h1>Семантика</h1>
+  <nav>
+    <a href="./">Проекты</a>
+    <a class="on" href="merge.html">Объединить CSV</a>
+  </nav>
+</header>
+<main>
+  <div class="drop" id="drop">Перетащи сюда несколько CSV/TXT (Keys.so, Key Collector, Wordstat…)<br>
+    <span style="font-size:12.5px">или кликни для выбора · всё объединяется прямо в браузере, файлы никуда не загружаются</span>
+    <input id="file" type="file" accept=".csv,.txt,.tsv" multiple hidden>
+  </div>
+  <div id="flist"></div>
+  <div class="stats" id="stats" style="display:none"></div>
+  <button class="btn" id="dl" disabled>⬇ Скачать объединённый CSV</button>
+  <div class="hint">Формат результата: <b style="color:var(--text)">Запрос;Базовая частотность;Точная
+  частотность;Очень точная частотность;Является топонимом;Является вопросом</b> — готов к загрузке
+  в проект. Повторяющиеся фразы склеиваются: частотности берутся максимальные из всех файлов,
+  флаги объединяются. Колонки в каждом файле распознаются по заголовкам автоматически;
+  файл без распознанной колонки запросов помечается красным и пропускается.</div>
+</main>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const fmt = n => n.toLocaleString("ru-RU");
+const strip = h => h.trim().toLowerCase().replace(/["“”«»]/g, "");
+const Q_AL = new Set(["запрос","ключевая фраза","фраза","ключ","keyword","ключевое слово","key","запросы","keys"]);
+const B_AL = new Set(["базовая частотность","частотность","частота","ws","базовая","частота ws","wordstat","базовая частота"]);
+const E_AL = new Set(["точная частотность","!частота","частота !","ws !","точная","точная частота","!ws","!wordstat"]);
+const V_AL = new Set(["[!wordstat]","[!ws]","[!частота]","очень точная частотность","очень точная","очень точная частота"]);
+const T_AL = new Set(["является топонимом","топоним","toponym","гео","geo"]);
+const W_AL = new Set(["является вопросом","вопрос","question"]);
+
+const files = [];          // {name, rows: [[q,b,e,v,t,w]], err}
+const merged = new Map();  // qLower -> {q,b,e,v,t,w}
+
+function parseLine(line, d){
+  const out = []; let cur = "", inQ = false;
+  for (let i = 0; i < line.length; i++){
+    const ch = line[i];
+    if (inQ){
+      if (ch === '"'){ if (line[i+1] === '"'){ cur += '"'; i++; } else inQ = false; }
+      else cur += ch;
+    } else if (ch === '"') inQ = true;
+    else if (ch === d){ out.push(cur); cur = ""; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+function toInt(v){ v = String(v || "").replace(/["\s ]/g, ""); return /^\d+$/.test(v) ? +v : 0; }
+function toFlag(v){ return ["1","да","true","yes","+"].includes(String(v || "").trim().toLowerCase().replace(/"/g, "")) ? 1 : 0; }
+
+function parseFile(name, buf){
+  let text;
+  try{ text = new TextDecoder("utf-8", {fatal: true}).decode(buf); }
+  catch(e){ text = new TextDecoder("windows-1251").decode(buf); }
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) return {name, rows: [], err: "пустой файл"};
+  const delim = [";", "\t", ",", "|"].reduce((a, b) => lines[0].split(b).length > lines[0].split(a).length ? b : a);
+  const head = parseLine(lines[0], delim).map(strip);
+  let qc = -1, bc = -1, ec = -1, vc = -1, tc = -1, wc = -1, hasHeader = false;
+  head.forEach((h, i) => {
+    if (Q_AL.has(h) && qc < 0){ qc = i; hasHeader = true; }
+    else if (V_AL.has(h) && vc < 0){ vc = i; hasHeader = true; }
+    else if (E_AL.has(h) && ec < 0){ ec = i; hasHeader = true; }
+    else if (B_AL.has(h) && bc < 0){ bc = i; hasHeader = true; }
+    else if (T_AL.has(h) && tc < 0){ tc = i; hasHeader = true; }
+    else if (W_AL.has(h) && wc < 0){ wc = i; hasHeader = true; }
+  });
+  if (!hasHeader){ qc = 0; bc = 1; ec = 2; vc = 3; }
+  if (qc < 0) return {name, rows: [], err: "не нашёл колонку с запросами — проверь заголовки"};
+  const rows = [];
+  for (let li = hasHeader ? 1 : 0; li < lines.length; li++){
+    const r = parseLine(lines[li], delim);
+    const q = (r[qc] || "").trim().replace(/^"|"$/g, "");
+    if (!q) continue;
+    rows.push([q, bc >= 0 ? toInt(r[bc]) : 0, ec >= 0 ? toInt(r[ec]) : 0,
+               vc >= 0 ? toInt(r[vc]) : 0, tc >= 0 ? toFlag(r[tc]) : 0,
+               wc >= 0 ? toFlag(r[wc]) : 0]);
+  }
+  return {name, rows, err: rows.length ? "" : "не удалось разобрать строки"};
+}
+
+function remerge(){
+  merged.clear();
+  for (const f of files){
+    for (const [q, b, e, v, t, w] of f.rows){
+      const k = q.toLowerCase();
+      const cur = merged.get(k);
+      if (!cur) merged.set(k, {q, b, e, v, t, w});
+      else{
+        cur.b = Math.max(cur.b, b); cur.e = Math.max(cur.e, e);
+        cur.v = Math.max(cur.v, v); cur.t = cur.t || t; cur.w = cur.w || w;
+      }
+    }
+  }
+  renderList();
+}
+
+function renderList(){
+  const fl = $("#flist");
+  fl.innerHTML = "";
+  files.forEach((f, i) => {
+    const div = document.createElement("div");
+    div.className = "file" + (f.err ? " bad" : "");
+    div.innerHTML = `<span class="nm">${f.name.replace(/</g, "&lt;")}</span>
+      <span class="info">${f.err ? `<span style="color:var(--err)">${f.err}</span>`
+        : `<b>${fmt(f.rows.length)}</b> фраз`}</span>
+      <button title="Убрать">✕</button>`;
+    div.querySelector("button").onclick = () => { files.splice(i, 1); remerge(); };
+    fl.appendChild(div);
+  });
+  const total = files.reduce((a, f) => a + f.rows.length, 0);
+  const st = $("#stats");
+  if (files.length){
+    st.style.display = "";
+    st.innerHTML = `<span>файлов: <b>${files.filter(f => !f.err).length}</b></span>
+      <span>строк всего: <b>${fmt(total)}</b></span>
+      <span>уникальных фраз: <b>${fmt(merged.size)}</b></span>
+      <span>дублей склеено: <b>${fmt(total - merged.size)}</b></span>`;
+  } else st.style.display = "none";
+  $("#dl").disabled = !merged.size;
+}
+
+async function addFiles(list){
+  for (const f of list){
+    files.push(parseFile(f.name, await f.arrayBuffer()));
+  }
+  remerge();
+}
+
+$("#dl").onclick = () => {
+  const lines = [["Запрос","Базовая частотность","Точная частотность",
+                  "Очень точная частотность","Является топонимом","Является вопросом"]];
+  const items = [...merged.values()].sort((a, b) => (b.v || b.e || b.b) - (a.v || a.e || a.b));
+  for (const it of items) lines.push([it.q, it.b, it.e, it.v, it.t, it.w]);
+  const csv = "﻿" + lines.map(r => r.map(v =>
+    String(v).includes(";") || String(v).includes('"')
+      ? '"' + String(v).replace(/"/g, '""') + '"' : v).join(";")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], {type: "text/csv;charset=utf-8"}));
+  a.download = "merged.keys.csv";
+  a.click();
+  URL.revokeObjectURL(a.href);
+};
+
+const drop = $("#drop"), file = $("#file");
+drop.onclick = () => file.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add("over"); };
+drop.ondragleave = () => drop.classList.remove("over");
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove("over"); addFiles(e.dataTransfer.files); };
+file.onchange = () => { addFiles(file.files); file.value = ""; };
+</script>
+</body>
+</html>
