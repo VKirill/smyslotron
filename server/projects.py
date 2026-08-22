@@ -329,7 +329,24 @@ async def move_phrases(pid: str, request: Request, user: sqlite3.Row = Depends(c
                       "task='cluster', error='', retries=0, history=CASE WHEN history='' THEN ? "
                       "ELSE history || ' · ' || ? END WHERE id=?",
                       (len(existing), added, entry, entry, dst["id"]))
-        return {"target": dst["id"], "added": added, "moved": len(rows), "new": False}
+            # перенесённые фразы в целевом проекте достаём из его корзины (возврат «туда-сюда»)
+            tr = c.execute("SELECT value FROM user_prefs WHERE user_id=? AND key=?",
+                           (user["id"], f"sem_trash:{dst['id']}")).fetchone()
+            restored = 0
+            if tr:
+                try:
+                    trash = json.loads(tr["value"]) or []
+                    moved_l = {it[0].lower() for it in rows}
+                    keep = [t for t in trash if str(t).lower() not in moved_l]
+                    restored = len(trash) - len(keep)
+                    if restored:
+                        c.execute("UPDATE user_prefs SET value=?, updated=? WHERE user_id=? AND key=?",
+                                  (json.dumps(keep, ensure_ascii=False), time.strftime("%F %T"),
+                                   user["id"], f"sem_trash:{dst['id']}"))
+                except (json.JSONDecodeError, TypeError, AttributeError):
+                    pass
+        return {"target": dst["id"], "added": added, "moved": len(rows), "new": False,
+                "restored": restored}
 
     # новый проект из перенесённых фраз
     name = (body.get("name") or f"{src['name'][:50]} — выборка").strip()[:80]

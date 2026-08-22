@@ -167,7 +167,7 @@ async function openMoveDialog(phrases, nFolders, singles){
       saveTrash(); hideCtx(); render();
       alert(d.new
         ? `Создан новый проект (${fmt(d.added)} фраз), кластеризация запущена. Здесь перенесённые фразы в корзине.`
-        : `Перенесено ${fmt(d.moved)} фраз (новых для проекта: ${fmt(d.added)}), пересчёт запущен. Здесь они в корзине.`);
+        : `Перенесено ${fmt(d.moved)} фраз (новых для проекта: ${fmt(d.added)}${d.restored ? `, возвращено из его корзины: ${fmt(d.restored)}` : ""}). ${d.added ? "Пересчёт запущен." : "Пересчёт не нужен — фразы там уже есть."} Здесь они в корзине.`);
     }catch(e){ alert("Ошибка переноса: " + e.message); hideCtx(); }
   };
 }
