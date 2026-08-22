@@ -11,3 +11,6 @@ web/data/
 .venv/
 __pycache__/
 *.pyc
+
+# gitnexus index
+.gitnexus/
