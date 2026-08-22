@@ -113,7 +113,9 @@ async function runPromptEval(){
       saveSoon();
     }catch(e){ failed++; }
     done++;
-    prog.textContent = `Оценка: ${Math.min(done * 20, items.length)} / ${items.length} папок…`;
+    const evaluated = list.filter(c => PRES[Q[c.top]] !== undefined).length;
+    prog.textContent = `Оценка: проверено ${fmt(evaluated)} из ${fmt(list.length)}, осталось ${fmt(list.length - evaluated)}${failed ? ` · ошибок ${failed}` : ""}…`;
+    updateRunBtn(evaluated, list.length);
   };
   // семафор: до 500 одновременных запросов (лимит DeepSeek — 2500 соединений)
   const LIMIT = 500;
@@ -123,9 +125,21 @@ async function runPromptEval(){
   clearTimeout(saveT);
   dbSet("sem_pres:" + (PID || "demo"), PRES);
   const usd = (usage.in * 0.28 + usage.out * 0.42) / 1e6;
-  prog.textContent = `Готово: оценено ${Object.keys(PRES).length} папок · ~$${usd.toFixed(3)}${failed ? ` · ошибок батчей: ${failed}` : ""}`;
+  const evaluated = list.filter(c => PRES[Q[c.top]] !== undefined).length;
+  prog.textContent = `Готово: проверено ${fmt(evaluated)} из ${fmt(list.length)} папок за этот прогон` +
+    (list.length - evaluated ? `, без оценки осталось ${fmt(list.length - evaluated)} (нажми ▶ ещё раз)` : "") +
+    ` · ~$${usd.toFixed(3)}${failed ? ` · ошибок батчей: ${failed}` : ""}`;
+  updateRunBtn();
   renderPresFlt();
   render();
+}
+
+function updateRunBtn(done, total){
+  const b = $("#prRun");
+  if (!b) return;
+  b.textContent = total === undefined ? "▶ Прогнать по папкам среза"
+    : `⏳ ${fmt(done)} / ${fmt(total)} папок…`;
+  b.disabled = total !== undefined;
 }
 
 function renderPrLib(){
