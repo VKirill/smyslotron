@@ -87,6 +87,7 @@ async function boot(){
     savePrefs(); render();
   };
   $("#prRun").onclick = e => { e.preventDefault(); runPromptEval(); };
+  $("#prJson").onclick = e => { e.preventDefault(); exportPresJSON(); };
   $("#presSort").addEventListener("change", e => { state.presSort = e.target.checked; savePrefs(); render(); });
   $("#pfField").addEventListener("change", () => {
     const v = $("#pfField").value;

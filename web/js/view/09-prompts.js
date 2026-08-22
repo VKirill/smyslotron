@@ -131,3 +131,28 @@ async function copyMarkers(btn){
   setTimeout(() => { btn.textContent = old; }, 1400);
 }
 
+
+async function exportPresJSON(){
+  // кластеры текущего среза с учётом мин. размера и активного фильтра по оценкам
+  const {vkey, clusters} = await sliceClusters();
+  const out = [];
+  for (const c of clusters){
+    if (c.idxs.length < state.minSize) continue;
+    const ev = PRES[Q[c.top]];
+    if (presFltActive() && !testPresF(ev)) continue;
+    out.push({
+      cluster: Q[c.top],
+      sum_freq: c.sum,
+      phrases: [...c.idxs].sort((x, y) => F[y] - F[x]).map(i => Q[i]),
+      eval: ev ?? null,
+    });
+  }
+  if (!out.length){ alert("Под фильтр не попала ни одна папка"); return; }
+  const blob = new Blob([JSON.stringify(out, null, 2)], {type: "application/json"});
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  const modeName = {hard: "hard", avg: "avg", soft: "soft"}[state.mode];
+  a.download = `clusters_${vkey}_${modeName}_${out.length}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
