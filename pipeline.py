@@ -739,6 +739,7 @@ async def main():
     (data_dir / "queries.json").write_text(
         json.dumps({"q": r_qs, "f": r_fp, "b": r_fb, "d": dups, "total": n,
                     "g": r_geo,
+                    "l": [lemma_texts[i] for i in reps],  # леммы для поиска «любая форма слова»
                     "w": [max(ques_all[m] for m in groups[i]) for i in reps]},
                    ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
 

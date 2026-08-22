@@ -219,9 +219,11 @@
     </div>
     <div class="grp">
       <label>Поиск по фразам</label>
-      <input type="search" id="search" placeholder="аниме · [под ключ] · !москва">
-      <div class="hint">операторы: <b>[слова]</b> — именно в этом порядке подряд;
-      <b>!</b> в начале — показать НЕ соответствующие фильтру</div>
+      <input type="search" id="search" placeholder='[под ключ] · "купить слона" · !москве · !!аренда'>
+      <div class="hint">операторы как в Вордстате: <b>[слова]</b> — подряд и в этом
+      порядке; <b>"слова"</b> — фраза ровно из этих слов; <b>!слово</b> — ровно такая
+      форма (работает и внутри скобок/кавычек); <b>!!</b> в начале — показать НЕ
+      соответствующие. Без «!» слово ищется в любой форме (по леммам)</div>
     </div>
     <div class="grp">
       <label>Режим анализа</label>
@@ -350,7 +352,7 @@ function titleOf(k){ const v = META && META.providers && META.providers[k];
   return (v && v.title) || VARIANT_TITLES[k] || k; }
 function isAB(){ return state.cols.length > 1; }
 
-let META, Q, F, B, D, G, W, INT, TOTAL, N;
+let META, Q, F, B, D, G, W, L, INT, TOTAL, N;
 const INT_SHORT = {"информационный": "И", "коммерческое исследование": "К",
                    "транзакционный": "Т", "навигационный": "Н"};
 const INT_CLS = {"информационный": "ii", "коммерческое исследование": "ik",
@@ -499,38 +501,77 @@ async function getCols(){
 
 function esc(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;"); }
 /* Поиск с операторами (по мотивам Вордстата):
-   [слова] — фразы, где слова идут подряд именно в этом порядке;
-   !запрос — инверсия: фразы, НЕ соответствующие фильтру (работает и с [ ]). */
-let _mq = {q: null, neg: false, seq: null, txt: ""};
+   [слова]   — слова идут подряд именно в этом порядке (форма любая — по леммам);
+   "слова"   — фраза состоит ровно из этих слов (число слов зафиксировано, порядок любой);
+   !слово    — ровно такая форма слова (работает и внутри [ ] и " ");
+   !!запрос  — инверсия: показать фразы, НЕ соответствующие фильтру. */
+let _mq = {q: null};
+function _tokenize(s){
+  // [{w, ex}] — слово + флаг «точная форма»
+  return s.split(/\s+/).filter(Boolean)
+          .map(w => ({w: w.replace(/^!/, ""), ex: w.startsWith("!")}))
+          .filter(t => t.w);
+}
 function _compileQ(q){
   if (_mq.q === q) return _mq;
   let neg = false, s = q;
-  if (s.startsWith("!")){ neg = true; s = s.slice(1).trim(); }
-  let seq = null;
-  const m = s.match(/^\[(.*)\]$/);
-  if (m){ seq = m[1].trim().split(/\s+/).filter(Boolean); s = ""; }
-  _mq = {q, neg, seq: seq && seq.length ? seq : null, txt: s};
+  if (s.startsWith("!!")){ neg = true; s = s.slice(2).trim(); }
+  let seq = null, quote = null, exact = null, subs = null, txt = "";
+  let m;
+  if ((m = s.match(/^\[(.*)\]$/))){
+    seq = _tokenize(m[1]);
+    if (!seq.length) seq = null;
+  } else if ((m = s.match(/^["«](.*)["»]$/))){
+    quote = _tokenize(m[1]);
+    if (!quote.length) quote = null;
+  } else if (/(^|\s)!\S/.test(s)){
+    exact = []; subs = [];
+    for (const t of _tokenize(s)) (t.ex ? exact : subs).push(t.w);
+    if (!exact.length){ exact = null; txt = subs.join(" "); subs = null; }
+  } else txt = s;
+  _mq = {q, neg, seq, quote, exact, subs, txt};
   return _mq;
 }
-function hasSeq(text, seq){
-  const w = text.toLowerCase().split(/\s+/);
-  outer: for (let s = 0; s + seq.length <= w.length; s++){
-    for (let j = 0; j < seq.length; j++) if (w[s + j] !== seq[j]) continue outer;
-    return true;
-  }
-  return false;
-}
+// слово запроса подходит к слову фразы: точное совпадение, а без «!» — ещё и по лемме
+function _wOk(t, raw, lem, k){ return raw[k] === t.w || (!t.ex && lem && lem[k] === t.w); }
 function matchQ(i, q){
   const c = _compileQ(q);
-  if (!c.seq && !c.txt) return true;  // «!» или «[]» без текста — не фильтруем
-  const hit = c.seq
-    ? (hasSeq(Q[i], c.seq) || !!(D && D[i] && D[i].some(f => hasSeq(f, c.seq))))
-    : (Q[i].toLowerCase().includes(c.txt) || !!(D && D[i] && D[i].some(f => f.toLowerCase().includes(c.txt))));
+  if (!c.seq && !c.quote && !c.exact && !c.txt) return true;
+  const hitText = (t, lt) => {
+    const low = t.toLowerCase();
+    if (c.txt) return low.includes(c.txt);
+    const raw = low.split(/\s+/);
+    const lem = lt ? lt.split(/\s+/) : null;
+    if (c.seq){
+      outer: for (let s = 0; s + c.seq.length <= raw.length; s++){
+        for (let j = 0; j < c.seq.length; j++)
+          if (!_wOk(c.seq[j], raw, lem, s + j)) continue outer;
+        return true;
+      }
+      return false;
+    }
+    if (c.quote){
+      if (raw.length !== c.quote.length) return false;
+      const used = new Array(raw.length).fill(false);
+      for (const t2 of c.quote){
+        let found = -1;
+        for (let k = 0; k < raw.length; k++)
+          if (!used[k] && _wOk(t2, raw, lem, k)){ found = k; break; }
+        if (found < 0) return false;
+        used[found] = true;
+      }
+      return true;
+    }
+    // смешанный режим: !точные + обычные подстроки
+    return c.exact.every(w => raw.includes(w)) && c.subs.every(x => low.includes(x));
+  };
+  const hit = hitText(Q[i], L && L[i] || "") || !!(D && D[i] && D[i].some(f => hitText(f, "")));
   return c.neg ? !hit : hit;
 }
 function hi(s, q){
   if (!q) return esc(s);
-  q = q.replace(/^!/, "").trim().replace(/^\[/, "").replace(/\]$/, "").trim();
+  q = q.replace(/^!!/, "").trim().replace(/^[\["«]/, "").replace(/[\]"»]$/, "")
+       .replace(/(^|\s)!(\S)/g, "$1$2").trim();
   if (!q) return esc(s);
   const i = s.toLowerCase().indexOf(q);
   if (i < 0) return esc(s);
@@ -982,7 +1023,7 @@ async function boot(){
     const ir = await fetch(DATA_BASE + "intents.json", {cache: "no-cache", credentials: "same-origin"});
     if (ir.ok) INT = (await ir.json()).i;
   }catch(e){}
-  Q = qd.q; F = qd.f; B = qd.b; D = qd.d || null; G = qd.g || null; W = qd.w || null; N = Q.length; TOTAL = qd.total || N;
+  Q = qd.q; F = qd.f; B = qd.b; D = qd.d || null; G = qd.g || null; W = qd.w || null; L = qd.l || null; N = Q.length; TOTAL = qd.total || N;
 
   // варианты эмбеддингов: галочки, до 3 колонок одновременно
   state.cols = [META.provs.includes("openai") ? "openai" : META.provs[0]];
