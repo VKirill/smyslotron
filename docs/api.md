@@ -34,6 +34,7 @@ query_col, base_col, exact_col, vexact_col, topo_col, ques_col}`. Подтвер
 | POST | `/projects/{pid}/run` | — | поставить в очередь заново (после failed или append с defer) |
 | POST | `/projects/{pid}/append` | маппинг + `defer_run?` | докинуть фразы: точные дубли схлопываются (max частот, OR флагов), новое — в конец; сносит деревья; `defer_run: true` не ставит в очередь (мультизагрузка шлёт его на каждый файл и один `/run` в конце) |
 | POST | `/projects/{pid}/label` | — | разметка интентов (`--label-only`); требует существующего `data/meta.json` |
+| POST | `/projects/{pid}/slice` | `{variant, mode, slider, min_size}` | зафиксировать срез просмотрщика как каноническую кластеризацию: пишет `slice.json` в папку проекта и ставит дешёвую пересборку в очередь; `result.csv` и кластерные колонки интентов дальше строятся по этому срезу (кластеры < min_size → «Без группы»), а не по автопорогу |
 | POST | `/projects/{pid}/target_geo` | `{target_geo}` | целевой регион (синонимы через запятую); применяется в просмотрщике сразу, в серверный CSV — при следующем пересчёте |
 | DELETE | `/projects/{pid}` | — | удалить проект и его файлы |
 | GET | `/projects/{pid}/data/{fname}` | — | выдача данных просмотрщику; whitelist-regex: `queries.json`, `meta.json`, `intents.json`, `result.csv`, `[a-z0-9_]{1,20}_(hard|soft|avg).bin` |

@@ -365,6 +365,50 @@ def pick_reps(freqs, emb, cand, chunks):
     return sorted(out), out
 
 
+def _load_slice(n_reps: int):
+    """Зафиксированный пользователем срез (slice.json): метки union-find по дереву
+    выбранного варианта/режима + min_size. Возвращает (labels, min_size) или None."""
+    try:
+        sl = json.loads((PDIR / "slice.json").read_text())
+    except (OSError, json.JSONDecodeError):
+        return None
+    fbin = PDIR / "data" / f"{sl.get('variant')}_{sl.get('mode')}.bin"
+    if not fbin.exists():
+        return None
+    raw = fbin.read_bytes()
+    m = len(raw) // 12
+    k = max(0, min(m, round(float(sl.get("slider", 0)) / 10000 * (n_reps - 1))))
+    parent = list(range(n_reps + k))
+
+    def find(x):
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    for i in range(k):
+        a, b, _ = struct.unpack_from("<iif", raw, i * 12)
+        node = n_reps + i
+        parent[find(a)] = node
+        parent[find(b)] = node
+    lab = np.array([find(i) for i in range(n_reps)])
+    return lab, max(1, int(sl.get("min_size", 1)))
+
+
+def apply_slice(fine, r_geo, target_geo):
+    """Заменяет автоматические метки на зафиксированный срез (если он сохранён),
+    затем гео-разрез; кластеры меньше min_size уходят в -1 («Без группы»)."""
+    slc = _load_slice(len(r_geo))
+    if slc is not None:
+        fine = slc[0]
+    fine = split_by_geo(fine, r_geo, target_geo)
+    if slc is not None and slc[1] > 1:
+        from collections import Counter
+        cnt = Counter(int(x) for x in fine)
+        fine = np.array([int(x) if cnt[int(x)] >= slc[1] else -1 for x in fine])
+    return fine
+
+
 def split_by_geo(labels, geo, target=""):
     """Кластер с разными гео-ключами режется по гео. target — список синонимов
     целевого региона через запятую («москва, мо, подмосковье»): целевые слова
@@ -646,8 +690,10 @@ async def main():
         # кластерные колонки CSV — по фиксированному срезу базового варианта
         set_status("Экспорт CSV", 96)
         fine, coarse = build_all(emb_base[rep_idx], base_key, data_dir, 96, 98)
-        fine = split_by_geo(fine, r_geo, target_geo)
+        fine = apply_slice(fine, r_geo, target_geo)
         names_f, names_c = name_of(fine, r_qs, r_fp), name_of(coarse, r_qs, r_fp)
+        if -1 in names_f:
+            names_f[-1] = "Без группы"
         # агрегат по кластеру: dominant / вторичный / риск смешения (>=25% чужого интента)
         agg: dict[int, dict] = {}
         cl_freq: dict[int, dict] = {}
@@ -727,7 +773,7 @@ async def main():
                        int(38 + (vi + 1) * span), skipped=skipped)
     if fine is None:  # база не построилась в цикле — считаем отдельно
         fine, coarse = build_all(emb_base[rep_idx], base_key, data_dir, 93, 95)
-    fine = split_by_geo(fine, r_geo, target_geo)
+    fine = apply_slice(fine, r_geo, target_geo)
 
     (data_dir / "meta.json").write_text(json.dumps(
         {"n": len(reps), "generated": time.strftime("%F %H:%M"),
@@ -736,6 +782,8 @@ async def main():
 
     set_status("Экспорт CSV", 96)
     names_f, names_c = name_of(fine, r_qs, r_fp), name_of(coarse, r_qs, r_fp)
+    if -1 in names_f:
+        names_f[-1] = "Без группы"
     rows = []
     for i in range(n):
         k = pos[rep_of[i]]

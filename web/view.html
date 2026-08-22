@@ -178,6 +178,7 @@
   <a href="./" class="back" title="К проектам">←</a>
   <h1 id="ptitle">Семантика · экспресс-кластеризация</h1>
   <span class="sub" id="psub">эмбеддинги + HAC, срез дендрограммы в браузере</span>
+  <a id="savesl" class="csvbtn" href="#" title="Зафиксировать текущий срез (вариант, режим, сила, мин. размер) как кластеризацию проекта: серверный CSV и интенты кластеров будут считаться по нему">💾 Сохранить срез</a>
   <a id="slicebtn" class="csvbtn" href="#" title="Выгрузить кластеры ровно с текущими настройками (вариант, режим, сила, мин. размер)">⬇ Текущий срез в CSV</a>
   <a id="csvlink" class="csvbtn" style="display:none" href="#" title="Серверный CSV: базовый вариант, средняя связь, автопорог (+интенты, если размечены)">Скачать CSV</a>
 </header>
@@ -1049,6 +1050,20 @@ async function boot(){
   syncUI();
 
   $("#slicebtn").onclick = e => { e.preventDefault(); exportSlice(); };
+
+  $("#savesl").onclick = async e => {
+    e.preventDefault();
+    if (!PID){ alert("Демо-режим: сохранение среза недоступно"); return; }
+    const v = state.cols[0];
+    if (!confirm(`Зафиксировать срез: ${titleOf(v)} · ${MODE_NAME[state.mode]} · ${(state.slider / 100).toFixed(1)}% · мин.${state.minSize}?\n\nСерверный CSV и кластерные колонки интентов будут пересобраны по этому срезу.`)) return;
+    try{
+      await fetch(`api/projects/${PID}/slice`, {method: "POST", credentials: "same-origin",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({variant: v, mode: state.mode,
+                              slider: state.slider, min_size: state.minSize})});
+      alert("Срез сохранён, пересборка запущена (обычно меньше минуты — эмбеддинги и деревья уже в кэше). Когда проект снова станет «готов», серверный CSV и интенты кластеров будут по этому срезу.");
+    }catch(err){ alert("Не удалось сохранить: " + err.message); }
+  };
 
   $("#tplAdd").onclick = () => {
     const def = `${state.cols.map(k => VARIANT_SHORT[k] || k).join("+")} ${(state.slider / 100).toFixed(1)}%`;
