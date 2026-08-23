@@ -116,6 +116,7 @@
   <nav style="display:flex; gap:14px">
     <a href="./" style="color:var(--text); text-decoration:none; font-size:14px; border-bottom:2px solid var(--accent); padding-bottom:2px">Проекты</a>
     <a href="merge.html" style="color:var(--muted); text-decoration:none; font-size:14px">Объединить CSV</a>
+    <a href="#" id="openKeys" style="color:var(--muted); text-decoration:none; font-size:14px">⚙ Настройки</a>
   </nav>
   <span class="who" id="who"></span>
 </header>
@@ -136,6 +137,52 @@ async function api(path, opts = {}){
   if (!r.ok) throw new Error(data?.detail || `Ошибка ${r.status}`);
   return data;
 }
+/* ---------------- настройки: личные API-ключи (БД, автосохранение) ---------------- */
+const KEY_FIELDS = [
+  ["OPENAI_API_KEY", "OpenAI", "эмбеддинги text-embedding-3-large"],
+  ["GEMINI_API_KEY", "Google Gemini", "эмбеддинги gemini-embedding"],
+  ["VOYAGE_API_KEY", "Voyage AI", "эмбеддинги voyage-3-large"],
+  ["DASHSCOPE_API_KEY", "DashScope (Qwen)", "эмбеддинги text-embedding-v4"],
+  ["DEEPSEEK_API_KEY", "DeepSeek", "интенты и промты по папкам"],
+  ["VASTAI_API_KEY", "Vast.ai", "автоаренда GPU для больших ядер"],
+];
+async function openKeys(){
+  let keys = {};
+  try{ keys = (await api("prefs/sem_keys")).value || {}; }catch(e){ console.warn(e); }
+  const m = document.createElement("div");
+  m.className = "modal";
+  m.innerHTML = `<div class="mbox" style="max-width:560px">  <!-- guardian: allow статическая разметка, значения через esc -->
+    <h2>⚙ Настройки · личные API-ключи</h2>
+    <p style="color:var(--muted); font-size:13px; margin-bottom:14px">Ключи хранятся в твоём аккаунте и подставляются во все твои задачи вместо серверных. Пустое поле — используется ключ сервера. Сохраняется автоматически.</p>
+    ${KEY_FIELDS.map(([k, t, d]) => `<div class="fld" style="margin-bottom:12px">
+      <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:5px">${t} <span style="opacity:.7">— ${d}</span></label>
+      <input type="password" data-k="${k}" value="${esc(keys[k] || "")}" placeholder="${k}" autocomplete="off" style="width:100%">
+    </div>`).join("")}
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:6px">
+      <label class="chk" style="padding:0"><input type="checkbox" id="kShow"> показать ключи</label>
+      <span id="kStatus" style="font-size:12px; color:var(--muted)"></span>
+      <button class="btn" id="kClose">Закрыть</button>
+    </div></div>`;
+  document.body.appendChild(m);
+  let t;
+  const save = () => {
+    clearTimeout(t);
+    t = setTimeout(async () => {
+      const v = {};
+      m.querySelectorAll("input[data-k]").forEach(i => { if (i.value.trim()) v[i.dataset.k] = i.value.trim(); });
+      try{
+        await api("prefs/sem_keys", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({value: v})});
+        m.querySelector("#kStatus").textContent = "✓ сохранено";
+      }catch(e){ m.querySelector("#kStatus").textContent = "Ошибка: " + e.message; }
+    }, 400);
+  };
+  m.querySelectorAll("input[data-k]").forEach(i => i.addEventListener("input", save));
+  m.querySelector("#kShow").onchange = e => m.querySelectorAll("input[data-k]").forEach(i => i.type = e.target.checked ? "text" : "password");
+  m.querySelector("#kClose").onclick = () => m.remove();
+  m.addEventListener("click", e => { if (e.target === m) m.remove(); });
+}
+document.getElementById("openKeys").onclick = e => { e.preventDefault(); openKeys(); };
+
 function loading(on){ $("#loader").style.display = on ? "flex" : "none"; }
 function esc(s){ return String(s ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/"/g, "&quot;"); }
 

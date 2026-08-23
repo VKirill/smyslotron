@@ -35,7 +35,7 @@ async def prompt_eval(request: Request, user: sqlite3.Row = Depends(current_user
     items = body.get("items") or []
     if not prompt or not isinstance(items, list) or not 0 < len(items) <= 40:
         raise HTTPException(400, "Нужен prompt и от 1 до 40 items")
-    env = pipeline_env()
+    env = pipeline_env(user["id"])
     key = env.get("DEEPSEEK_API_KEY")
     if not key:
         raise HTTPException(500, "DEEPSEEK_API_KEY не настроен")

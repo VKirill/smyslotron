@@ -10,7 +10,12 @@ from .db import db
 from .projects import project_dir
 
 
-def pipeline_env() -> dict:
+# ключи, которые пользователь может задать сам в «⚙ Настройки» (prefs sem_keys)
+USER_KEYS = ("OPENAI_API_KEY", "GEMINI_API_KEY", "VOYAGE_API_KEY", "DASHSCOPE_API_KEY",
+             "DEEPSEEK_API_KEY", "VASTAI_API_KEY")
+
+
+def pipeline_env(user_id: int | None = None) -> dict:
     import os
     env = dict(os.environ)
     for f in (ENV_FILE, BASE / ".env"):  # локальный .env приложения поверх общего
@@ -19,6 +24,18 @@ def pipeline_env() -> dict:
                 m = re.match(r"^([A-Z0-9_]+)=(.*)$", line.strip())
                 if m:
                     env[m.group(1)] = m.group(2).strip().strip('"').strip("'")
+    if user_id is not None:  # личные ключи пользователя поверх серверных
+        with db() as c:
+            row = c.execute("SELECT value FROM user_prefs WHERE user_id=? AND key='sem_keys'",
+                            (user_id,)).fetchone()
+        try:
+            keys = json.loads(row["value"]) if row else {}
+        except json.JSONDecodeError:
+            keys = {}
+        for k in USER_KEYS:
+            v = str((keys or {}).get(k) or "").strip()
+            if v:
+                env[k] = v
     return env
 
 
@@ -52,7 +69,7 @@ async def run_pipeline(row: sqlite3.Row) -> None:
     if row["task"] == "label":
         args.append("--label-only")
     proc = await asyncio.create_subprocess_exec(
-        *args, cwd=BASE, env=pipeline_env(),
+        *args, cwd=BASE, env=pipeline_env(row["user_id"]),
         stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
     _, err = await proc.communicate()
     st = {}
