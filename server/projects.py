@@ -294,6 +294,15 @@ async def move_phrases(pid: str, request: Request, user: sqlite3.Row = Depends(c
         raise HTTPException(400, "Фразы не найдены в ядре проекта")
 
     target = body.get("target")
+    # журнал переносов источника: когда, куда, что именно уехало
+    try:
+        with open(project_dir(src) / "moves.log", "a", encoding="utf-8") as lf:
+            lf.write(json.dumps(
+                {"ts": time.strftime("%F %T"), "target": str(target or ""),
+                 "name": (body.get("name") or "")[:80], "count": len(rows),
+                 "phrases": [r[0] for r in rows]}, ensure_ascii=False) + "\n")
+    except OSError:
+        pass
     if target:
         dst = own_project(str(target), user)
         if dst["status"] == "running":
