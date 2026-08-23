@@ -239,6 +239,9 @@ async function boot(){
     $("#prSchema").value = PRLIB[0].schema || "";
     $("#prSel").value = "0";
   }
+  // восстановить фильтр по оценкам ДО отрисовки его селекта — иначе фильтр
+  // действует, а в интерфейсе выглядит выключенным
+  if (prefs.presFlt && prefs.presFlt.field) state.presFlt = prefs.presFlt;
   renderPresFlt();
   // применить сохранённый пользователем порядок блоков сайдбара
   const lay = await dbGet("sem_layout");
@@ -252,7 +255,6 @@ async function boot(){
     for (const el of seq) pane.appendChild(el);
   });
   if (prefs.presSort){ state.presSort = true; $("#presSort").checked = true; }
-  if (prefs.presFlt && prefs.presFlt.field) state.presFlt = prefs.presFlt;
   if (prefs.anOn){
     state.anOn = true;
     $("#anOn").checked = true;
