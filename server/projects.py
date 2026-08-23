@@ -272,6 +272,14 @@ async def move_phrases(pid: str, request: Request, user: sqlite3.Row = Depends(c
     wanted = {str(p).strip().lower() for p in (body.get("phrases") or []) if str(p).strip()}
     if not wanted:
         raise HTTPException(400, "Нет фраз для переноса")
+    # склеенные дубли выбранных представителей едут вместе с ними
+    try:
+        qd = json.loads((project_dir(src) / "data" / "queries.json").read_text())
+        for q, dups in zip(qd.get("q", []), qd.get("d") or []):
+            if q.strip().lower() in wanted:
+                wanted.update(str(d).strip().lower() for d in (dups or []))
+    except (OSError, json.JSONDecodeError):
+        pass
     # строки источника по выбранным фразам
     rows = []
     with open(project_dir(src) / "keys.csv", encoding="utf-8-sig") as f:
