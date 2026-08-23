@@ -52,6 +52,9 @@ function showCtx(e, c){
   const linkCnt = SELC.size + (SELC.has(anchor) ? 0 : 1);
   const items = [
     ["⧉", "Копировать фразы кластера", () => copyCluster(c, document.createElement("button"))],
+    [DONE.has(anchor) ? "✅" : "🟢",
+     DONE.has(anchor) ? "Снять пометку «проработан»" : "Проработан",
+     () => { DONE.has(anchor) ? DONE.delete(anchor) : DONE.add(anchor); saveDone(); render(); }, "done"],
     [SELC.has(anchor) ? "✖" : "☑",
      SELC.has(anchor) ? "Снять отметку связки" : "Отметить для связки (Ctrl+клик; Shift+клик — диапазон)",
      () => { SELC.has(anchor) ? SELC.delete(anchor) : SELC.add(anchor); render(); }],
@@ -74,9 +77,6 @@ function showCtx(e, c){
       for (const i of c.idxs) SELQ.delete(Q[i]);
       updateSelBar(); render();
     }],
-    [DONE.has(anchor) ? "✅" : "🟢",
-     DONE.has(anchor) ? "Снять пометку «проработан»" : "Проработан",
-     () => { DONE.has(anchor) ? DONE.delete(anchor) : DONE.add(anchor); saveDone(); render(); }, "done"],
     ["🗑", `Кластер в корзину (${fmt(n)} фраз)`, () => {
       for (const i of c.idxs) TRASH.add(Q[i]);
       saveTrash(); render();
