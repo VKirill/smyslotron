@@ -51,6 +51,7 @@ function showCtx(e, c){
   const anchor = Q[c.top];
   const linkCnt = SELC.size + (SELC.has(anchor) ? 0 : 1);
   const items = [
+    ["⧉", "Копировать фразы кластера", () => copyCluster(c, document.createElement("button"))],
     [SELC.has(anchor) ? "✖" : "☑",
      SELC.has(anchor) ? "Снять отметку связки" : "Отметить для связки (Ctrl+клик; Shift+клик — диапазон)",
      () => { SELC.has(anchor) ? SELC.delete(anchor) : SELC.add(anchor); render(); }],
@@ -80,7 +81,6 @@ function showCtx(e, c){
       for (const i of c.idxs) TRASH.add(Q[i]);
       saveTrash(); render();
     }],
-    ["⧉", "Копировать фразы кластера", () => copyCluster(c, document.createElement("button"))],
     ["📤", `Перенести кластер в другой проект`, () => {
       const ph = [];
       for (const i of c.idxs){ ph.push(Q[i]); if (D && D[i]) ph.push(...D[i]); }
