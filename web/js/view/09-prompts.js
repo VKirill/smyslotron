@@ -165,15 +165,28 @@ async function copyMarkers(btn){
 async function exportPresJSON(){
   // кластеры текущего среза с учётом мин. размера и активного фильтра по оценкам
   const {vkey, clusters} = await sliceClusters();
+  // все виды частотности по каждой фразе (и по дублям) — из keys.csv проекта
+  let FR = {};
+  if (PID){
+    try{ FR = await (await fetch(`api/projects/${PID}/freqs`, {credentials: "same-origin"})).json(); }
+    catch(e){ console.warn("freqs недоступны, выгружаю без частотностей", e); }  // guardian: allow деградация без блокировки выгрузки
+  }
+  const fq = t => { const [b, e, v] = FR[t] || [0, 0, 0]; return {phrase: t, base: b, exact: e, very_exact: v}; };
   const out = [];
   for (const c of clusters){
     if (c.idxs.length < state.minSize) continue;
     const ev = PRES[Q[c.top]];
     if (presFltActive() && !testPresF(ev)) continue;
+    const idxs = [...c.idxs].sort((x, y) => F[y] - F[x]);
     out.push({
       cluster: Q[c.top],
       sum_freq: c.sum,
-      phrases: [...c.idxs].sort((x, y) => F[y] - F[x]).map(i => Q[i]),
+      sum_base: idxs.reduce((s, i) => s + (B[i] || 0), 0),
+      phrases: idxs.map(i => {
+        const o = fq(Q[i]);
+        if (D && D[i] && D[i].length) o.dups = D[i].map(fq);
+        return o;
+      }),
       eval: ev ?? null,
     });
   }

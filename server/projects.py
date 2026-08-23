@@ -398,6 +398,23 @@ DATA_FILES = re.compile(
     r"result\.csv|report\.md)$")
 
 
+@router.get("/projects/{pid}/freqs")
+async def project_freqs(pid: str, user: sqlite3.Row = Depends(current_user)):
+    """Все виды частотности по каждой фразе из keys.csv: {фраза: [базовая, точная, очень точная]}."""
+    import csv
+    path = project_dir(own_project(pid, user)) / "keys.csv"
+    if not path.exists():
+        raise HTTPException(404)
+    out = {}
+    with open(path, encoding="utf-8-sig") as f:
+        for row in csv.DictReader(f, delimiter=";"):
+            q = (row.get("Запрос") or "").strip()
+            if q:
+                out[q] = [int(row.get(k) or 0) for k in
+                          ("Базовая частотность", "Точная частотность", "Очень точная частотность")]
+    return out
+
+
 @router.get("/projects/{pid}/data/{fname}")
 async def project_data(pid: str, fname: str, user: sqlite3.Row = Depends(current_user)):
     row = own_project(pid, user)
