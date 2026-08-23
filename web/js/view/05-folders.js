@@ -5,6 +5,7 @@ function folderEl(c, col, overlap){
   div.className = "folder";
   div.dataset.anchor = Q[c.top];
   if (SELC.has(Q[c.top])) div.className += " linkmark";
+  if (DONE.has(Q[c.top])) div.className += " done";
   if (c.same === true) div.className += " same";
   else if (c.same === false) div.className += " diff";
   if (state.sel && state.sel.col === col.prov && state.sel.label === c.label) div.className += " sel";

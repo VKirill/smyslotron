@@ -4,6 +4,8 @@ let TRASH = new Set();  // тексты фраз в корзине (persist: sem
 function saveTrash(){ dbSet("sem_trash:" + (PID || "demo"), [...TRASH]); }
 let RULES = {must: [], not: []};   // правила связок (persist: sem_rules:<pid>)
 let PRES = {};                     // результаты промт-оценки: маркер папки -> объект
+let DONE = new Set();              // «проработанные» кластеры: якорь (текст топ-фразы); persist sem_done:<pid>
+function saveDone(){ dbSet("sem_done:" + (PID || "demo"), [...DONE]); }
 let PRLIB = [];                    // сохранённые промты: [{name, prompt, schema}]
 function scoreOf(r){
   if (!r || typeof r !== "object") return null;
@@ -71,6 +73,9 @@ function showCtx(e, c){
       for (const i of c.idxs) SELQ.delete(Q[i]);
       updateSelBar(); render();
     }],
+    [DONE.has(anchor) ? "✅" : "🟢",
+     DONE.has(anchor) ? "Снять пометку «проработан»" : "Проработан",
+     () => { DONE.has(anchor) ? DONE.delete(anchor) : DONE.add(anchor); saveDone(); render(); }, "done"],
     ["🗑", `Кластер в корзину (${fmt(n)} фраз)`, () => {
       for (const i of c.idxs) TRASH.add(Q[i]);
       saveTrash(); render();
@@ -82,9 +87,9 @@ function showCtx(e, c){
       openMoveDialog(ph, 1);
     }],
   ];
-  for (const [ico, label, fn] of items){
+  for (const [ico, label, fn, cls] of items){
     const d = document.createElement("div");
-    d.className = "ctxitem";
+    d.className = "ctxitem" + (cls ? " " + cls : "");
     d.innerHTML = `<span>${ico}</span><span>${label}</span>`; // guardian: allow статические строки из кода
     d.onclick = () => { hideCtx(); fn(); };
     m.appendChild(d);

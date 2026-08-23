@@ -231,6 +231,7 @@ async function boot(){
   const rl = await dbGet("sem_rules:" + (PID || "demo"));
   if (rl && Array.isArray(rl.must) && Array.isArray(rl.not)) RULES = rl;
   PRES = (await dbGet("sem_pres:" + (PID || "demo"))) || {};
+  DONE = new Set((await dbGet("sem_done:" + (PID || "demo"))) || []);
   PRLIB = (await dbGet("sem_prompts")) || [];
   renderPrLib();
   if (PRLIB.length){

@@ -228,6 +228,10 @@
   }
 
   .folder.linkmark{outline:2px solid var(--accent); outline-offset:-2px}
+  .folder.done{background:#12291a; border-color:#2f7a4d}
+  .folder.done .qlist{background:#0e2015}
+  .folder.done > .fhead .name::after{content:" ✅"; font-size:11px}
+  .ctxitem.done{color:#4ade80}
   .folder.linkmark .fhead::after{content:"🔗"; font-size:11px}
 
   .evalcnt{color:var(--muted)}
